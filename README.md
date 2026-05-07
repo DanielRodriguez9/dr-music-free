@@ -31,59 +31,52 @@ Aplicación para gestionar música local. Descarga, organiza y reproduce tu mús
 
 ## ✨ Características
 
-| Funcionalidad | Estado |
-|--------------|--------|
-| Descarga de audio de YouTube | ✅ |
-| Biblioteca local con PostgreSQL | ✅ |
-| Reproductor (play/pause/volumen) | ✅ |
-| Barra de progreso interactiva | ✅ |
-| Búsqueda en tiempo real | ✅ |
-| Thumbnails de YouTube | ✅ |
-| Navegación (Inicio/Buscar/Biblioteca) | ✅ |
-| Eliminar canciones | ✅ |
-| Paginación | 🔄 Próximamente |
-| Modo aleatorio (Shuffle) | 🔄 Próximamente |
-| Playlists | 🔄 Próximamente |
+- ✅ Descarga de audio de YouTube
+- ✅ Biblioteca local con PostgreSQL
+- ✅ Reproductor (play/pause/volumen)
+- ✅ Barra de progreso interactiva
+- ✅ Búsqueda en tiempo real
+- ✅ Thumbnails de YouTube
+- ✅ Navegación (Inicio/Buscar/Biblioteca)
 
 ---
 
-## 🚀 Instalación
+## 🚀 Instalación (proyecto completo)
 
-### Requisitos previos
+### 1. Clonar el repositorio
 
-- Python 3.12+
-- Node.js 18+
-- PostgreSQL 15+
-- FFmpeg (instalado en el sistema)
+```
+git clone https://github.com/DanielRodriguez9/dr-music-free.git
+cd dr-music-free
 
-### Backend
+2. Backend
 
-```bash
 cd backend
 pip install -r requirements.txt
+
+Crea tu archivo .env (usa .env.example como guía)
+
+
 uvicorn main:app --reload
-
-
-
-Frontend
-
+3. Frontend
+bash
 cd frontend
 npm install
 npm run dev
 
-Variables de entorno
-Crea un archivo .env en backend/ con:
 
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=tu_base_datos
-DB_USER=postgres
-DB_PASSWORD=tu_contraseña
+🗄️ Requisitos externos
+Python 3.12+
+
+Node.js 18+
+
+PostgreSQL 15+
+
+FFmpeg instalado en el sistema
 
 
-
-Estructura del proyecto
-
+📁 Estructura del proyecto
+text
 dr-music-free/
 ├── backend/
 │   ├── main.py
@@ -92,71 +85,20 @@ dr-music-free/
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── App.jsx
-│   │   └── index.css
 │   ├── package.json
-│   └── README.md
+│   └── ...
+├── .gitignore
 └── README.md
 
 
-
-
-Capturas de pantalla
-
-Próximamente
-
-
-
-Roadmap
-
-v1.1.0 (Próxima versión)
-Paginación en biblioteca
-
-Botón "Ver todas" en inicio
-
-Modo aleatorio (shuffle)
-
-v1.2.0
-Repetir canción (repeat)
-
-Siguiente/Anterior automático
-
-Eliminar canciones desde interfaz
-
-v2.0.0
-Playlists personalizadas
-
-Exportar/Importar biblioteca
-
-Modo claro/oscuro
-
-
-
-
--------------
-
- Autor
+👤 Autor
 Daniel Rodríguez
 
 GitHub: @DanielRodriguez9
 
-
----------------
-
-Licencia
-MIT - Uso personal y educativo.
-
------------------
-
-⭐ Si te gusta el proyecto, ¡dale una estrella!
+📄 Licencia
+MIT – Uso personal y educativo.
 
 
--------------------
-Contacto
-¿Preguntas o sugerencias? Abre un Issue en GitHub o contáctame directamente.
-
-
-
+⭐ ¿Te gusta el proyecto? Dale una estrella en GitHub.
 
