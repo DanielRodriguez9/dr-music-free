@@ -9,6 +9,29 @@ Aplicación para gestionar música local. Descarga, organiza y reproduce tu mús
 
 ---
 
+Capturas de Pantalla
+
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/DanielRodriguez9/dr-music-free/main/Captura%20de%20pantalla%202026-05-07%20185938.png" width="800" style="border-radius:10px; margin-bottom:20px;">
+
+<br><br>
+
+<img src="https://raw.githubusercontent.com/DanielRodriguez9/dr-music-free/main/Captura%20de%20pantalla%202026-05-07%20190008.png" width="800" style="border-radius:10px; margin-bottom:20px;">
+
+<br><br>
+
+<img src="https://raw.githubusercontent.com/DanielRodriguez9/dr-music-free/main/Captura%20de%20pantalla%202026-05-07%20190033.png" width="800" style="border-radius:10px; margin-bottom:20px;">
+
+<br><br>
+
+<img src="https://raw.githubusercontent.com/DanielRodriguez9/dr-music-free/main/Captura%20de%20pantalla%202026-05-07%20190057.png" width="800" style="border-radius:10px;">
+
+</div>
+
+
+***
+
 ## ⚠️ Aviso Legal
 
 **Esta herramienta es para fines EDUCATIVOS y USO PERSONAL.**
