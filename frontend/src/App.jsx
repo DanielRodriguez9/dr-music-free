@@ -23,6 +23,8 @@ function App() {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(70);
   const [thumbnails, setThumbnails] = useState({});
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState(false);
 
   const audioRef = useRef(null);
 
@@ -48,7 +50,6 @@ function App() {
           ...prev,
           [songId]: response.data.thumbnail_url,
         }));
-        console.log(`Thumbnail cargada para canción ${songId}`);
       }
     } catch (error) {
       console.error("Error al cargar thumbnail:", error);
@@ -58,6 +59,23 @@ function App() {
   useEffect(() => {
     loadSongs();
   }, []);
+
+  // Obtener siguiente canción (con shuffle o normal)
+  const getNextSong = () => {
+    if (songs.length === 0) return null;
+    
+    if (shuffle) {
+      const otherSongs = songs.filter(s => s.id !== currentSong?.id);
+      if (otherSongs.length === 0) return null;
+      return otherSongs[Math.floor(Math.random() * otherSongs.length)];
+    } else {
+      const currentIndex = songs.findIndex(s => s.id === currentSong?.id);
+      if (currentIndex !== -1 && currentIndex + 1 < songs.length) {
+        return songs[currentIndex + 1];
+      }
+      return null;
+    }
+  };
 
   // Control del reproductor
   const playSong = (song) => {
@@ -72,7 +90,6 @@ function App() {
     } else {
       setCurrentSong(song);
       const audioUrl = `http://127.0.0.1:8000${song.public_url}`;
-      console.log("Reproduciendo:", audioUrl);
 
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
@@ -93,12 +110,16 @@ function App() {
     const updateTime = () => setCurrentTime(audio.currentTime);
     const updateDuration = () => setDuration(audio.duration);
     const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-      // Pasar a la siguiente canción automáticamente
-      const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
-      if (currentIndex !== -1 && currentIndex + 1 < songs.length) {
-        playSong(songs[currentIndex + 1]);
+      if (repeat && currentSong) {
+        audio.currentTime = 0;
+        audio.play();
+      } else {
+        setIsPlaying(false);
+        setCurrentTime(0);
+        const next = getNextSong();
+        if (next) {
+          playSong(next);
+        }
       }
     };
 
@@ -111,7 +132,7 @@ function App() {
       audio.removeEventListener("loadedmetadata", updateDuration);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [currentSong, songs]);
+  }, [currentSong, songs, shuffle, repeat]);
 
   // Control de volumen
   useEffect(() => {
@@ -129,7 +150,7 @@ function App() {
   };
 
   const handleViewAll = () => {
-    setActiveTab("library"); // Cambia a la pestaña de biblioteca
+    setActiveTab("library");
   };
 
   const handleProgressChange = (e) => {
@@ -141,22 +162,49 @@ function App() {
   };
 
   const nextSong = () => {
-    const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
-    if (currentIndex !== -1 && currentIndex + 1 < songs.length) {
-      playSong(songs[currentIndex + 1]);
+    if (repeat && currentSong) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
+    } else {
+      const next = getNextSong();
+      if (next) {
+        playSong(next);
+      }
     }
   };
 
   const prevSong = () => {
-    const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
-    if (currentIndex > 0) {
-      playSong(songs[currentIndex - 1]);
+    if (shuffle) {
+      nextSong();
+    } else {
+      const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
+      if (currentIndex > 0) {
+        playSong(songs[currentIndex - 1]);
+      }
     }
+  };
+
+  const handleShuffleToggle = () => {
+    setShuffle(!shuffle);
+    toast.success(shuffle ? '🔀 Shuffle desactivado' : '🔀 Shuffle activado', {
+      duration: 1500,
+      style: { background: '#0ea5e9', color: '#fff' }
+    });
+  };
+
+  const handleRepeatToggle = () => {
+    setRepeat(!repeat);
+    toast.success(repeat ? '🔁 Repetir desactivado' : '🔁 Repetir activado', {
+      duration: 1500,
+      style: { background: '#0ea5e9', color: '#fff' }
+    });
   };
 
   const handleDownload = async () => {
     if (!url.trim()) {
-      toast.error(" Por favor ingresa una URL de YouTube");
+      toast.error("❌ Por favor ingresa una URL de YouTube");
       return;
     }
 
@@ -218,7 +266,7 @@ function App() {
             thumbnails={thumbnails}
             onPlaySong={playSong}
             onLoadThumbnail={loadThumbnail}
-            onViewAll={handleViewAll} // ← Agrega esta línea
+            onViewAll={handleViewAll}
           />
         );
       case "search":
@@ -241,6 +289,7 @@ function App() {
             thumbnails={thumbnails}
             onPlaySong={playSong}
             onLoadThumbnail={loadThumbnail}
+            onSongDeleted={loadSongs}
           />
         );
       default:
@@ -272,11 +321,15 @@ function App() {
         currentTime={currentTime}
         duration={duration}
         volume={volume}
+        shuffle={shuffle}
+        repeat={repeat}
         onPlayPause={() => playSong(currentSong)}
         onPrev={prevSong}
         onNext={nextSong}
         onProgressChange={handleProgressChange}
         onVolumeChange={(e) => setVolume(e.target.value)}
+        onShuffleToggle={handleShuffleToggle}
+        onRepeatToggle={handleRepeatToggle}
         formatTime={formatTime}
       />
     </div>
