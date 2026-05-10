@@ -17,6 +17,13 @@ Capturas de Pantalla
 
 <br><br>
 
+<img src="https://raw.githubusercontent.com/DanielRodriguez9/dr-music-free/main/Captura%20de%20pantalla%202026-05-10%20154026.png" width="800" style="border-radius:10px; margin-bottom:20px;">
+
+
+
+
+<br><br>
+
 <img src="https://raw.githubusercontent.com/DanielRodriguez9/dr-music-free/main/Captura%20de%20pantalla%202026-05-07%20190008.png" width="800" style="border-radius:10px; margin-bottom:20px;">
 
 <br><br>
