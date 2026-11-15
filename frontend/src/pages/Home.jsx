@@ -11,7 +11,7 @@ function Home({
   onLoadThumbnail,
   onViewAll,
 }) {
-  const recentSongs = [...songs].reverse().slice(0, 10);
+  const recentSongs = [...songs].reverse().slice(0, 12);
 
   return (
     <>
@@ -159,6 +159,7 @@ function Home({
                 thumbnail={thumbnails[song.id]}
                 onClick={() => onPlaySong(song)}
                 onMouseEnter={() => onLoadThumbnail(song.id)}
+                
               />
             ))
           )}

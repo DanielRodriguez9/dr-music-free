@@ -16,7 +16,6 @@ function App() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [activeTab, setActiveTab] = useState("home");
 
-  // Estados del reproductor
   const [currentSong, setCurrentSong] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -25,22 +24,20 @@ function App() {
   const [thumbnails, setThumbnails] = useState({});
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   const audioRef = useRef(null);
 
-  // Cargar canciones desde el backend
   const loadSongs = async () => {
     try {
       const response = await axios.get("http://127.0.0.1:8000/songs/");
       setSongs(response.data);
-      console.log("Canciones cargadas:", response.data);
     } catch (error) {
-      console.error("Error al cargar canciones:", error);
+      console.error(error);
       toast.error("Error al cargar tu biblioteca");
     }
   };
 
-  // Cargar thumbnail de una canción
   const loadThumbnail = async (songId) => {
     if (thumbnails[songId]) return;
     try {
@@ -52,7 +49,7 @@ function App() {
         }));
       }
     } catch (error) {
-      console.error("Error al cargar thumbnail:", error);
+      console.error(error);
     }
   };
 
@@ -60,16 +57,14 @@ function App() {
     loadSongs();
   }, []);
 
-  // Obtener siguiente canción (con shuffle o normal)
   const getNextSong = () => {
     if (songs.length === 0) return null;
-    
     if (shuffle) {
-      const otherSongs = songs.filter(s => s.id !== currentSong?.id);
+      const otherSongs = songs.filter((s) => s.id !== currentSong?.id);
       if (otherSongs.length === 0) return null;
       return otherSongs[Math.floor(Math.random() * otherSongs.length)];
     } else {
-      const currentIndex = songs.findIndex(s => s.id === currentSong?.id);
+      const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
       if (currentIndex !== -1 && currentIndex + 1 < songs.length) {
         return songs[currentIndex + 1];
       }
@@ -77,7 +72,6 @@ function App() {
     }
   };
 
-  // Control del reproductor
   const playSong = (song) => {
     if (currentSong?.id === song.id && audioRef.current) {
       if (isPlaying) {
@@ -90,19 +84,15 @@ function App() {
     } else {
       setCurrentSong(song);
       const audioUrl = `http://127.0.0.1:8000${song.public_url}`;
-
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
         audioRef.current.load();
-        audioRef.current
-          .play()
-          .catch((e) => console.error("Error al reproducir:", e));
+        audioRef.current.play().catch((e) => console.error(e));
         setIsPlaying(true);
       }
     }
   };
 
-  // Eventos del audio
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -117,9 +107,7 @@ function App() {
         setIsPlaying(false);
         setCurrentTime(0);
         const next = getNextSong();
-        if (next) {
-          playSong(next);
-        }
+        if (next) playSong(next);
       }
     };
 
@@ -134,14 +122,10 @@ function App() {
     };
   }, [currentSong, songs, shuffle, repeat]);
 
-  // Control de volumen
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume / 100;
-    }
+    if (audioRef.current) audioRef.current.volume = volume / 100;
   }, [volume]);
 
-  // Formatear tiempo
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
@@ -149,16 +133,12 @@ function App() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handleViewAll = () => {
-    setActiveTab("library");
-  };
+  const handleViewAll = () => setActiveTab("library");
 
   const handleProgressChange = (e) => {
     const newTime = parseFloat(e.target.value);
     setCurrentTime(newTime);
-    if (audioRef.current) {
-      audioRef.current.currentTime = newTime;
-    }
+    if (audioRef.current) audioRef.current.currentTime = newTime;
   };
 
   const nextSong = () => {
@@ -169,9 +149,7 @@ function App() {
       }
     } else {
       const next = getNextSong();
-      if (next) {
-        playSong(next);
-      }
+      if (next) playSong(next);
     }
   };
 
@@ -180,25 +158,23 @@ function App() {
       nextSong();
     } else {
       const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
-      if (currentIndex > 0) {
-        playSong(songs[currentIndex - 1]);
-      }
+      if (currentIndex > 0) playSong(songs[currentIndex - 1]);
     }
   };
 
   const handleShuffleToggle = () => {
     setShuffle(!shuffle);
-    toast.success(shuffle ? '🔀 Shuffle desactivado' : '🔀 Shuffle activado', {
+    toast.success(shuffle ? "🔀 Shuffle desactivado" : "🔀 Shuffle activado", {
       duration: 1500,
-      style: { background: '#0ea5e9', color: '#fff' }
+      style: { background: "#0ea5e9", color: "#fff" },
     });
   };
 
   const handleRepeatToggle = () => {
     setRepeat(!repeat);
-    toast.success(repeat ? '🔁 Repetir desactivado' : '🔁 Repetir activado', {
+    toast.success(repeat ? "🔁 Repetir desactivado" : "🔁 Repetir activado", {
       duration: 1500,
-      style: { background: '#0ea5e9', color: '#fff' }
+      style: { background: "#0ea5e9", color: "#fff" },
     });
   };
 
@@ -235,17 +211,24 @@ function App() {
       clearInterval(progressInterval);
       setDownloadProgress(100);
 
-      toast.success(`✅ ${response.data.song}`, {
-        duration: 4000,
-        icon: "🎵",
-        style: { background: "#0ea5e9", color: "#fff", fontWeight: "bold" },
-      });
+      if (response.data.status === "exists") {
+        toast.error("❌ Esa canción ya fue descargada");
+      } else {
+        toast.success(`✅ ${response.data.song}`, {
+          duration: 4000,
+          icon: "🎵",
+          style: {
+            background: "#0ea5e9",
+            color: "#fff",
+            fontWeight: "bold",
+          },
+        });
+      }
 
       setUrl("");
       await loadSongs();
       setTimeout(() => setDownloadProgress(0), 1000);
     } catch (error) {
-      console.error("Error detallado:", error);
       toast.error(`❌ Error: ${error.response?.data?.detail || error.message}`);
       setDownloadProgress(0);
     } finally {
@@ -254,7 +237,6 @@ function App() {
     }
   };
 
-  // Renderizar contenido según tab activa
   const renderContent = () => {
     switch (activeTab) {
       case "home":
@@ -302,36 +284,63 @@ function App() {
       <audio ref={audioRef} />
       <Toaster position="top-center" />
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      {/* BOTÓN HAMBURGUESA */}
+      <button
+        className="menu-toggle"
+        onClick={() => setMenuAbierto(!menuAbierto)}
+      >
+        ☰
+      </button>
 
-      <main className="main-content">
-        <DownloadBar
-          url={url}
-          setUrl={setUrl}
-          loading={loading}
-          downloadProgress={downloadProgress}
-          onDownload={handleDownload}
-        />
-        {renderContent()}
-      </main>
-
-      <Player
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
-        volume={volume}
-        shuffle={shuffle}
-        repeat={repeat}
-        onPlayPause={() => playSong(currentSong)}
-        onPrev={prevSong}
-        onNext={nextSong}
-        onProgressChange={handleProgressChange}
-        onVolumeChange={(e) => setVolume(e.target.value)}
-        onShuffleToggle={handleShuffleToggle}
-        onRepeatToggle={handleRepeatToggle}
-        formatTime={formatTime}
+      {/* OVERLAY OSCURO */}
+      <div
+        className={`sidebar-overlay ${menuAbierto ? "active" : ""}`}
+        onClick={() => setMenuAbierto(false)}
       />
+
+      {/* SIDEBAR */}
+      <div className={`sidebar-wrapper ${menuAbierto ? "open" : ""}`}>
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={(tab) => {
+            setActiveTab(tab);
+            setMenuAbierto(false);
+          }}
+        />
+      </div>
+
+      {/* CONTENIDO PRINCIPAL + FOOTER */}
+      <div className="main-area">
+        <main className="main-content">
+          <DownloadBar
+            url={url}
+            setUrl={setUrl}
+            loading={loading}
+            downloadProgress={downloadProgress}
+            onDownload={handleDownload}
+          />
+          {renderContent()}
+        </main>
+
+        {/* PLAYER (ahora dentro del main-area) */}
+        <Player
+          currentSong={currentSong}
+          isPlaying={isPlaying}
+          currentTime={currentTime}
+          duration={duration}
+          volume={volume}
+          shuffle={shuffle}
+          repeat={repeat}
+          onPlayPause={() => playSong(currentSong)}
+          onPrev={prevSong}
+          onNext={nextSong}
+          onProgressChange={handleProgressChange}
+          onVolumeChange={(e) => setVolume(e.target.value)}
+          onShuffleToggle={handleShuffleToggle}
+          onRepeatToggle={handleRepeatToggle}
+          formatTime={formatTime}
+        />
+      </div>
     </div>
   );
 }

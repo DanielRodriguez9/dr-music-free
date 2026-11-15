@@ -34,3 +34,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Música descargada
+backend/music/
+music/
