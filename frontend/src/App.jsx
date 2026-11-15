@@ -7,6 +7,7 @@ import PlayerBar from "./components/PlayerBar";
 import QueuePanel from "./components/QueuePanel";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
+import CollectionsProvider from "./context/CollectionsProvider";
 import LibraryProvider from "./context/LibraryProvider";
 import UIProvider from "./context/UIProvider";
 import { useLibrary, usePlayer, useUI } from "./context/hooks";
@@ -17,7 +18,9 @@ import Collection from "./pages/Collection";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import Home from "./pages/Home";
+import { GenrePage, PlaylistPage } from "./pages/Playlist";
 import Search from "./pages/Search";
+import { parseView } from "./lib/views";
 import PlayerProvider from "./player/PlayerProvider";
 
 /** Componente sin interfaz que registra los atajos de teclado. */
@@ -66,6 +69,9 @@ function Content() {
   const { songs, playable, status } = useLibrary();
 
   if (status === "error") return <BackendError />;
+  const { name, param } = parseView(view);
+  if (name === "playlist") return <PlaylistPage id={param} />;
+  if (name === "genre") return <GenrePage name={param} />;
   switch (view) {
     case "search":
       return <Search />;
@@ -76,6 +82,7 @@ function Content() {
           title="Tu biblioteca"
           kicker="Colección"
           songs={songs}
+          genreFilter
           emptyText="Tu biblioteca está vacía. Usa «Descargar» para añadir canciones."
         />
       );
@@ -127,9 +134,11 @@ export default function App() {
   return (
     <UIProvider>
       <LibraryProvider>
-        <PlayerProvider>
-          <Layout />
-        </PlayerProvider>
+        <CollectionsProvider>
+          <PlayerProvider>
+            <Layout />
+          </PlayerProvider>
+        </CollectionsProvider>
       </LibraryProvider>
     </UIProvider>
   );

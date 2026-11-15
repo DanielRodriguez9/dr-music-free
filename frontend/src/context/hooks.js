@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { LibraryContext, PlayerContext, PlayerTimeContext, UIContext } from "./contexts";
+import { CollectionsContext, LibraryContext, PlayerContext, PlayerTimeContext, UIContext } from "./contexts";
 
 function useRequired(ctx, name) {
   const value = useContext(ctx);
@@ -11,3 +11,4 @@ export const useLibrary = () => useRequired(LibraryContext, "useLibrary");
 export const usePlayer = () => useRequired(PlayerContext, "usePlayer");
 export const usePlayerTime = () => useRequired(PlayerTimeContext, "usePlayerTime");
 export const useUI = () => useRequired(UIContext, "useUI");
+export const useCollections = () => useRequired(CollectionsContext, "useCollections");

@@ -1,13 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { load, save } from "../lib/storage";
+import { isView } from "../lib/views";
 import { UIContext } from "./contexts";
-
-const VIEWS = ["home", "search", "library", "liked", "history", "settings"];
 
 export default function UIProvider({ children }) {
   const [view, setView] = useState(() => {
     const v = load("view", "home");
-    return VIEWS.includes(v) ? v : "home";
+    return isView(v) ? v : "home";
   });
   const [query, setQuery] = useState("");
   const [queueOpen, setQueueOpen] = useState(() => Boolean(load("queueOpen", false)));
@@ -17,7 +16,7 @@ export default function UIProvider({ children }) {
   const scrollRef = useRef(null);
 
   const navigate = useCallback((next) => {
-    if (!VIEWS.includes(next)) return;
+    if (!isView(next)) return;
     setView(next);
     save("view", next);
     scrollRef.current?.scrollTo({ top: 0 });
@@ -52,6 +51,15 @@ export default function UIProvider({ children }) {
     [],
   );
 
+  /** Diálogo para escribir un texto (nombre de lista o género). Devuelve el texto o null. */
+  const prompt = useCallback(
+    (options) =>
+      new Promise((resolve) => {
+        setDialog({ type: "prompt", ...options, resolve });
+      }),
+    [],
+  );
+
   const closeDialog = useCallback((result = false) => {
     setDialog((d) => {
       d?.resolve?.(result);
@@ -59,7 +67,7 @@ export default function UIProvider({ children }) {
     });
   }, []);
 
-  const openMenu = useCallback((event, song, context) => {
+  const openMenu = useCallback((event, song, context = {}) => {
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget?.getBoundingClientRect?.();
@@ -69,6 +77,7 @@ export default function UIProvider({ children }) {
       x: fromButton ? rect.right : event.clientX,
       y: fromButton ? rect.bottom + 4 : event.clientY,
       alignRight: Boolean(fromButton),
+      id: Date.now(),
       song,
       context,
     });
@@ -92,11 +101,12 @@ export default function UIProvider({ children }) {
       openDialog: setDialog,
       closeDialog,
       confirm,
+      prompt,
       menu,
       openMenu,
       closeMenu,
     }),
-    [view, navigate, query, searchFor, focusSearch, queueOpen, toggleQueue, dialog, closeDialog, confirm, menu, openMenu, closeMenu],
+    [view, navigate, query, searchFor, focusSearch, queueOpen, toggleQueue, dialog, closeDialog, confirm, prompt, menu, openMenu, closeMenu],
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

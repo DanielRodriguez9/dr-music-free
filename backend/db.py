@@ -50,6 +50,7 @@ class Song(Base):
     source: Mapped[str] = mapped_column(String, default="youtube")  # youtube | local
     status: Mapped[str] = mapped_column(String, default="ok")  # ok | missing
     youtube_id: Mapped[str | None] = mapped_column(String(11), unique=True, index=True)
+    genre: Mapped[str | None] = mapped_column(String, index=True)
     youtube_url: Mapped[str | None] = mapped_column(String)
     thumbnail_url: Mapped[str | None] = mapped_column(String)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -75,6 +76,47 @@ class Play(Base):
     end_reason: Mapped[str] = mapped_column(String)  # ended | skipped | closed
     skipped: Mapped[bool] = mapped_column(Boolean, default=False)
     counted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # escuchas en línea (sin descargar): se guarda el video de YouTube
+    youtube_id: Mapped[str | None] = mapped_column(String(11), index=True)
+    online: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Playlist(Base):
+    __tablename__ = "playlists"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class PlaylistItem(Base):
+    __tablename__ = "playlist_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    playlist_id: Mapped[int] = mapped_column(ForeignKey("playlists.id", ondelete="CASCADE"), index=True)
+    song_id: Mapped[int] = mapped_column(ForeignKey("songs.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    added_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class Genre(Base):
+    __tablename__ = "genres"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Meta(Base):
+    """Pares clave/valor internos (p. ej. si ya se crearon los géneros iniciales)."""
+    __tablename__ = "meta"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str | None] = mapped_column(String)
+
+
+DEFAULT_GENRES = ["Salsa", "Reguetón", "Vallenato", "Electrónica", "Popular", "Pop", "Rap"]
 
 
 COUNT_MIN_SECONDS = 30
@@ -111,8 +153,74 @@ def make_engine(db_path: Path):
     return engine
 
 
-def init_db(engine) -> None:
+# Columnas añadidas después de la primera versión: (tabla, columna, definición SQL)
+_NEW_COLUMNS = [
+    ("songs", "genre", "VARCHAR"),
+    ("plays", "youtube_id", "VARCHAR(11)"),
+    ("plays", "online", "BOOLEAN NOT NULL DEFAULT 0"),
+]
+
+
+def _missing_columns(engine) -> list[tuple[str, str, str]]:
+    from sqlalchemy import inspect
+    insp = inspect(engine)
+    tables = set(insp.get_table_names())
+    missing = []
+    for table, column, ddl in _NEW_COLUMNS:
+        if table in tables and column not in {c["name"] for c in insp.get_columns(table)}:
+            missing.append((table, column, ddl))
+    return missing
+
+
+def backup_database(db_path: Path, label: str) -> Path | None:
+    """Copia coherente de la base (API de respaldo de SQLite) en DATA_DIR/backups."""
+    import sqlite3
+    if not db_path.is_file():
+        return None
+    folder = db_path.parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{db_path.stem}-{label}-{datetime.now():%Y%m%d-%H%M%S}.sqlite3"
+    src = sqlite3.connect(db_path)
+    dst = sqlite3.connect(target)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    return target
+
+
+def init_db(engine, db_path: Path | None = None) -> Path | None:
+    """Crea las tablas y añade las columnas nuevas. Antes de modificar una base existente
+    guarda una copia en DATA_DIR/backups. Devuelve la ruta de esa copia (o None)."""
+    from sqlalchemy import inspect, text
+    backup = None
+    existing = set(inspect(engine).get_table_names())
+    missing = _missing_columns(engine)
+    new_tables = {t.name for t in Base.metadata.sorted_tables} - existing
+    if db_path and existing and (missing or new_tables):
+        backup = backup_database(db_path, "antes-de-actualizar")
     Base.metadata.create_all(bind=engine)
+    if missing:
+        with engine.begin() as conn:
+            for table, column, ddl in missing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+    _seed_genres(engine)
+    return backup
+
+
+def _seed_genres(engine) -> None:
+    """Crea los géneros iniciales una sola vez (si luego se borran, no vuelven)."""
+    from sqlalchemy.orm import Session
+    with Session(engine) as db:
+        if db.get(Meta, "genres_seeded"):
+            return
+        have = {g.name for g in db.query(Genre)}
+        for i, name in enumerate(DEFAULT_GENRES):
+            if name not in have:
+                db.add(Genre(name=name, position=i))
+        db.add(Meta(key="genres_seeded", value="1"))
+        db.commit()
 
 
 def make_session_factory(engine):

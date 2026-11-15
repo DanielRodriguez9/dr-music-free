@@ -178,3 +178,28 @@ describe("restaurar", () => {
     expect([s.currentId, s.userQueue]).toEqual([30, [50]]);
   });
 });
+
+describe("varias canciones y canciones en línea", () => {
+  it("añade varias a la cola en orden (al final y a continuación)", () => {
+    let s = play(10);
+    s = run(s, { type: "ADD_TO_QUEUE", ids: [40, 50] });
+    s = run(s, { type: "ADD_TO_QUEUE", ids: [20, 30], next: true });
+    expect(s.userQueue).toEqual([20, 30, 40, 50]);
+  });
+
+  it("sin nada sonando, empieza con la primera y deja el resto en la cola", () => {
+    const s = run(init, { type: "ADD_TO_QUEUE", ids: ["yt:aaaaaaaaaaa", 20] });
+    expect(s.currentId).toBe("yt:aaaaaaaaaaa");
+    expect(s.userQueue).toEqual([20]);
+  });
+
+  it("REPLACE_ID cambia la canción en línea por la descargada sin cambiar de pista", () => {
+    let s = run(init, { type: "PLAY_CONTEXT", ids: ["yt:aaaaaaaaaaa", "yt:bbbbbbbbbbb"], startId: "yt:aaaaaaaaaaa" });
+    s = run(s, { type: "ADD_TO_QUEUE", id: "yt:aaaaaaaaaaa" });
+    const r = run(s, { type: "REPLACE_ID", from: "yt:aaaaaaaaaaa", to: 7 });
+    expect(r.currentId).toBe(7);
+    expect(r.context.ids).toEqual([7, "yt:bbbbbbbbbbb"]);
+    expect(r.userQueue).toEqual([7]);
+    expect(r.token).toBe(s.token);
+  });
+});

@@ -8,14 +8,52 @@ export const API_BASE = desktop?.apiBase || import.meta.env.VITE_API_URL || "htt
 
 export const api = axios.create({ baseURL: API_BASE });
 
-export const audioUrlForId = (id) => `${API_BASE}/songs/${id}/audio`;
+// Ids: número = canción de la biblioteca; "yt:<video>" = canción en línea de YouTube
+export const isOnlineId = (id) => typeof id === "string" && id.startsWith("yt:");
+export const isOnline = (song) => Boolean(song?.online);
+
+export const audioUrlForId = (id) =>
+  isOnlineId(id) ? `${API_BASE}/stream/${id.slice(3)}` : `${API_BASE}/songs/${id}/audio`;
+
+/** Resultado de búsqueda de YouTube -> canción en línea que entiende el reproductor. */
+export function onlineTrack(r) {
+  return {
+    id: `yt:${r.youtube_id}`,
+    online: true,
+    youtube_id: r.youtube_id,
+    title: r.title,
+    artist: r.artist || r.channel || null,
+    channel: r.channel || null,
+    original_title: r.raw_title || r.title,
+    duration: r.duration || null,
+    thumbnail_url: r.thumbnail_url || null,
+    youtube_url: r.url || `https://www.youtube.com/watch?v=${r.youtube_id}`,
+    public_url: `/stream/${r.youtube_id}`,
+    liked: false,
+    play_count: 0,
+    source: "online",
+    status: "ok",
+  };
+}
+
+// Prepara el audio en línea antes de pulsar (YouTube tarda unos segundos en darlo).
+const prepared = new Map();
+export function prepareOnline(youtubeId) {
+  const last = prepared.get(youtubeId);
+  if (last && Date.now() - last < 60 * 60 * 1000) return;
+  prepared.set(youtubeId, Date.now());
+  api
+    .get(`/stream/${youtubeId}/info`, { params: { prefetch: 1 }, timeout: 120000 })
+    .then(({ data }) => data.busy && prepared.delete(youtubeId)) // ocupado: se reintenta en otro momento
+    .catch(() => prepared.delete(youtubeId));
+}
 
 export const audioUrl = (song) => (song?.public_url ? `${API_BASE}${song.public_url}` : null);
 
 export const isPlayable = (song) => Boolean(song?.public_url);
 
 export const artistLabel = (song) =>
-  song?.artist || (song?.source === "local" ? "Archivo local" : "Artista desconocido");
+  song?.artist || (song?.source === "local" ? "Archivo local" : song?.online ? "YouTube" : "Artista desconocido");
 
 // Miniaturas de YouTube, de mejor a peor. hq720/maxres/mq no tienen franjas negras;
 // hqdefault (4:3) es el último recurso. Si ninguna existe, <Cover> muestra una nota musical.
@@ -25,7 +63,15 @@ export function coverUrls(song) {
   return ["hq720", "maxresdefault", "mqdefault", "hqdefault"].map((f) => `https://i.ytimg.com/vi/${id}/${f}.jpg`);
 }
 
-export const errorMessage = (error) => error?.response?.data?.detail || error?.message || "Error desconocido";
+export function errorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map((d) => d.msg).join("; ");
+  return error?.message || "Error desconocido";
+}
+
+/** Tipo de error que manda el servidor ("outdated" -> sugerir actualizar yt-dlp, "offline"). */
+export const errorKind = (error) => error?.response?.data?.kind || error?.kind || null;
 
 // Sigue una descarga hasta que termine; llama a onProgress con cada actualización.
 export async function waitForDownload(jobId, onProgress, intervalMs = 500) {

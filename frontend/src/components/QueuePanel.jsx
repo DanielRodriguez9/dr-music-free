@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Globe, X } from "lucide-react";
 import { artistLabel } from "../api";
 import { useLibrary, usePlayer, useUI } from "../context/hooks";
 import Cover from "./Cover";
@@ -12,7 +12,10 @@ function QueueItem({ song, onPlay, onRemove, active, playing, onMenu }) {
         <Cover song={song} size="sm" />
         <span className="qitem__text">
           <span className="qitem__title">{song.title}</span>
-          <span className="qitem__artist">{artistLabel(song)}</span>
+          <span className="qitem__artist">
+            {song.online && <Globe size={11} className="qitem__online" aria-label="En línea" />}
+            {artistLabel(song)}
+          </span>
         </span>
         {active && <Equalizer playing={playing} />}
       </button>

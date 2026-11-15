@@ -6,6 +6,7 @@
 // - userQueue: canciones añadidas a mano ("Añadir a la cola"); tienen prioridad.
 // - fromQueue: la canción actual salió de userQueue (no de la lista).
 // - token:   cambia con cada cambio de pista, aunque se repita la misma canción.
+// Los ids son números (biblioteca) o "yt:<video>" (canciones en línea de YouTube).
 
 export const REPEAT_MODES = ["off", "all", "one"];
 
@@ -126,12 +127,27 @@ export function queueReducer(s, action) {
     }
 
     case "ADD_TO_QUEUE": {
+      // una canción (id) o varias (ids), en el orden dado
+      const added = action.ids ?? [action.id];
+      if (!added.length) return s;
       if (s.currentId == null) {
-        // no hay nada sonando: empieza directamente
-        return withTrack(s, { currentId: action.id, fromQueue: true });
+        // no hay nada sonando: empieza directamente y el resto queda en la cola
+        const [first, ...rest] = added;
+        return withTrack(s, { currentId: first, userQueue: [...rest, ...s.userQueue], fromQueue: true });
       }
-      const userQueue = action.next ? [action.id, ...s.userQueue] : [...s.userQueue, action.id];
+      const userQueue = action.next ? [...added, ...s.userQueue] : [...s.userQueue, ...added];
       return { ...s, userQueue };
+    }
+
+    case "REPLACE_ID": {
+      // una canción en línea pasó a la biblioteca: mismo lugar en la cola, sin cortar el audio
+      const swap = (id) => (id === action.from ? action.to : id);
+      return {
+        ...s,
+        context: { ...s.context, ids: s.context.ids.map(swap) },
+        userQueue: s.userQueue.map(swap),
+        currentId: swap(s.currentId),
+      };
     }
 
     case "REMOVE_FROM_QUEUE":

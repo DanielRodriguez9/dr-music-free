@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { artistLabel, audioUrlForId, coverUrls, isPlayable } from "../api";
+import { api, artistLabel, audioUrlForId, coverUrls, isOnlineId, isPlayable, prepareOnline } from "../api";
 import { PlayerContext, PlayerTimeContext } from "../context/contexts";
 import { useLibrary } from "../context/hooks";
 import { load, save } from "../lib/storage";
+import { onlineErrorToast } from "../lib/ytdlp";
 import { initialQueueState, peekNext, queueReducer, serializeQueue, upcomingFromContext } from "./queue";
 
 const POSITION_SAVE_MS = 5000;
@@ -26,6 +27,7 @@ export default function PlayerProvider({ children }) {
   const [volume, setVolumeState] = useState(() => clamp01(Number(load("volume", 0.7)) || 0));
   const [muted, setMuted] = useState(() => Boolean(load("muted", false)));
   const [time, setTime] = useState({ pos: 0, dur: 0 });
+  const [loading, setLoading] = useState(false); // esperando audio (sobre todo en línea)
 
   // Refs para leer el estado más reciente desde los eventos del <audio>
   const stateRef = useRef(state);
@@ -37,16 +39,27 @@ export default function PlayerProvider({ children }) {
   const handlersRef = useRef({});
   // Escucha en curso para el historial: { songId, startedAt, listened, lastPos }
   const sessionRef = useRef(null);
+  const byIdRef = useRef(byId);
+  useEffect(() => {
+    byIdRef.current = byId;
+  }, [byId]);
 
   const finishSession = useCallback(
     (reason, opts) => {
       const ses = sessionRef.current;
       sessionRef.current = null;
       if (!ses || ses.listened < 1) return; // ni un segundo: no es una escucha
-      recordPlay(
-        { song_id: ses.songId, started_at: ses.startedAt, listened_seconds: ses.listened, end_reason: reason },
-        opts,
-      );
+      const base = { started_at: ses.startedAt, listened_seconds: ses.listened, end_reason: reason };
+      if (isOnlineId(ses.songId)) {
+        // canción en línea: se guarda el video y sus datos (no está en la biblioteca)
+        const t = byIdRef.current.get(ses.songId);
+        recordPlay(
+          { ...base, youtube_id: ses.songId.slice(3), title: t?.title, artist: t?.artist, duration: t?.duration || null },
+          opts,
+        );
+      } else {
+        recordPlay({ ...base, song_id: ses.songId }, opts);
+      }
     },
     [recordPlay],
   );
@@ -62,7 +75,9 @@ export default function PlayerProvider({ children }) {
 
   // ---------- cargar la pista actual en el <audio> ----------
   useEffect(() => {
-    const key = `${state.currentId}:${state.token}`;
+    // el token cambia con cada cambio de pista; REPLACE_ID (en línea -> descargada) no lo cambia
+    // y así la canción sigue sonando sin cortes
+    const key = state.token;
     if (loadedKeyRef.current === key) return;
     loadedKeyRef.current = key;
     finishSession("skipped"); // si la anterior terminó sola, ya se cerró como "ended"
@@ -120,8 +135,11 @@ export default function PlayerProvider({ children }) {
       if (id != null) save("position", { id, t: audio.currentTime });
     };
     const onPlay = () => setIsPlaying(true);
+    const onWaiting = () => setLoading(true);
+    const onReady = () => setLoading(false);
     const onPlaying = () => {
       errorsRef.current = 0;
+      setLoading(false);
       const ses = sessionRef.current;
       if (ses && !ses.startedAt) ses.startedAt = new Date().toISOString();
     };
@@ -130,6 +148,7 @@ export default function PlayerProvider({ children }) {
     };
     const onPause = () => {
       setIsPlaying(false);
+      setLoading(false);
       savePosition();
     };
     const onTime = () => {
@@ -150,7 +169,13 @@ export default function PlayerProvider({ children }) {
     const onDuration = () => setTime((t) => ({ ...t, dur: Number.isFinite(audio.duration) ? audio.duration : 0 }));
     const onEmptied = () => setTime({ pos: 0, dur: 0 });
     const onEnded = () => handlersRef.current.ended?.();
-    const onError = () => handlersRef.current.error?.();
+    const onError = () => {
+      setLoading(false);
+      handlersRef.current.error?.();
+    };
+    const onLoadStart = () => {
+      if (!audio.paused || autoplayRef.current) setLoading(true);
+    };
 
     const events = {
       play: onPlay,
@@ -163,6 +188,9 @@ export default function PlayerProvider({ children }) {
       emptied: onEmptied,
       ended: onEnded,
       error: onError,
+      waiting: onWaiting,
+      loadstart: onLoadStart,
+      canplay: onReady,
     };
     Object.entries(events).forEach(([e, fn]) => audio.addEventListener(e, fn));
     const onPageHide = () => {
@@ -245,20 +273,26 @@ export default function PlayerProvider({ children }) {
   const toggleShuffle = useCallback(() => dispatch({ type: "TOGGLE_SHUFFLE" }), []);
   const cycleRepeat = useCallback(() => dispatch({ type: "CYCLE_REPEAT" }), []);
 
+  // id o lista de ids
   const addToQueue = useCallback(
-    (id) => {
+    (ids) => {
       const starting = stateRef.current.currentId == null;
-      changeTrack({ type: "ADD_TO_QUEUE", id }, starting);
+      changeTrack({ type: "ADD_TO_QUEUE", ids: [].concat(ids) }, starting);
     },
     [changeTrack],
   );
   const playNext = useCallback(
-    (id) => {
+    (ids) => {
       const starting = stateRef.current.currentId == null;
-      changeTrack({ type: "ADD_TO_QUEUE", id, next: true }, starting);
+      changeTrack({ type: "ADD_TO_QUEUE", ids: [].concat(ids), next: true }, starting);
     },
     [changeTrack],
   );
+  /** Una canción en línea ya se descargó: se cambia por la de la biblioteca sin cortar el audio. */
+  const replaceTrack = useCallback((from, to) => {
+    if (sessionRef.current?.songId === from) sessionRef.current.songId = to;
+    dispatch({ type: "REPLACE_ID", from, to });
+  }, []);
   const removeFromQueue = useCallback((index) => dispatch({ type: "REMOVE_FROM_QUEUE", index }), []);
   const clearQueue = useCallback(() => dispatch({ type: "CLEAR_QUEUE" }), []);
   const jumpToQueue = useCallback((index) => changeTrack({ type: "JUMP_QUEUE", index }), [changeTrack]);
@@ -285,7 +319,20 @@ export default function PlayerProvider({ children }) {
       },
       error() {
         if (!audio.getAttribute("src")) return;
-        const song = byId.get(stateRef.current.currentId);
+        const id = stateRef.current.currentId;
+        const song = byId.get(id);
+        if (isOnlineId(id)) {
+          // el reproductor no dice por qué falló: se le pregunta al servidor
+          api
+            .get(`/stream/${id.slice(3)}/info`, { timeout: 120000 })
+            .then(() =>
+              toast.error(`Se cortó el audio en línea de "${song?.title ?? "la canción"}". Prueba otra vez.`, {
+                id: "audio-error",
+              }),
+            )
+            .catch((err) => onlineErrorToast(err, song));
+          return; // no se salta sola: el aviso explica qué hacer
+        }
         toast.error(`No se pudo reproducir ${song ? `"${song.title}"` : "la canción"}`, { id: "audio-error" });
         errorsRef.current += 1;
         if (errorsRef.current < 3 && peekNext(stateRef.current) != null && !audio.paused) {
@@ -296,6 +343,15 @@ export default function PlayerProvider({ children }) {
   }, [byId, changeTrack, finishSession, startSession]);
 
   const current = state.currentId != null ? byId.get(state.currentId) ?? null : null;
+
+  // si la siguiente es en línea, se prepara mientras suena esta
+  useEffect(() => {
+    if (!isPlaying) return;
+    const nextId = peekNext(state);
+    if (!isOnlineId(nextId)) return;
+    const timer = setTimeout(() => prepareOnline(nextId.slice(3)), 3000);
+    return () => clearTimeout(timer);
+  }, [state, isPlaying]);
 
   // ---------- teclas multimedia del teclado / Windows (MediaSession) ----------
   useEffect(() => {
@@ -367,6 +423,7 @@ export default function PlayerProvider({ children }) {
       upcoming,
       current,
       isPlaying,
+      loading,
       volume,
       muted,
       playContext,
@@ -386,8 +443,9 @@ export default function PlayerProvider({ children }) {
       clearQueue,
       jumpToQueue,
       jumpToContext,
+      replaceTrack,
     }),
-    [state, upcoming, current, isPlaying, volume, muted, playContext, play, pause, togglePlay, next, prev, setVolume,
+    [state, upcoming, current, isPlaying, loading, replaceTrack, volume, muted, playContext, play, pause, togglePlay, next, prev, setVolume,
       changeVolume, toggleMute, toggleShuffle, cycleRepeat, addToQueue, playNext, removeFromQueue, clearQueue,
       jumpToQueue, jumpToContext],
   );

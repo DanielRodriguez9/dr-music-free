@@ -14,7 +14,7 @@ export default function TopBar() {
           type="search"
           value={query}
           placeholder="¿Qué quieres escuchar?"
-          aria-label="Buscar en tu biblioteca"
+          aria-label="Buscar en tu biblioteca y en YouTube"
           onChange={(e) => {
             setQuery(e.target.value);
             if (view !== "search") navigate("search");

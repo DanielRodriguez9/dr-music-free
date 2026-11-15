@@ -1,5 +1,5 @@
 import toast from "react-hot-toast";
-import { api, errorMessage } from "../api";
+import { api, errorKind, errorMessage } from "../api";
 
 /** Actualiza yt-dlp mostrando el progreso en avisos. Devuelve el resultado o null. */
 export async function updateYtdlp() {
@@ -42,5 +42,47 @@ export function downloadErrorToast(err, toastId) {
       </span>
     ),
     { id: toastId, duration: 15000 },
+  );
+}
+
+/** Aviso cuando falla el audio en línea: explica la causa y, si toca, ofrece actualizar yt-dlp. */
+export function onlineErrorToast(err, song) {
+  const kind = errorKind(err);
+  const name = song?.title ? `«${song.title}»` : "esta canción";
+  if (kind === "offline") {
+    toast.error(`Sin conexión a internet: no se puede escuchar ${name} en línea. Tu biblioteca sigue disponible.`, {
+      id: "audio-error",
+      duration: 8000,
+    });
+    return;
+  }
+  if (kind === "unavailable") {
+    toast.error(`YouTube no permite escuchar ${name} (video privado, retirado o con restricciones).`, {
+      id: "audio-error",
+      duration: 8000,
+    });
+    return;
+  }
+  toast.error(
+    (t) => (
+      <span className="toast-action toast-action--column">
+        <span>
+          No se pudo escuchar {name} en línea. Suele pasar cuando YouTube cambia algo: actualizar yt-dlp lo
+          arregla casi siempre.
+          <small className="toast-detail">{errorMessage(err)}</small>
+        </span>
+        <button
+          type="button"
+          className="btn btn--small"
+          onClick={() => {
+            toast.dismiss(t.id);
+            updateYtdlp();
+          }}
+        >
+          Actualizar yt-dlp
+        </button>
+      </span>
+    ),
+    { id: "audio-error", duration: 15000 },
   );
 }

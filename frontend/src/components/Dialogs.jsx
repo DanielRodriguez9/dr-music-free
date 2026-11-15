@@ -190,6 +190,43 @@ function ConfirmDialog({ dialog, onClose }) {
   );
 }
 
+function PromptDialog({ dialog, onClose }) {
+  const [value, setValue] = useState(dialog.initial || "");
+  const clean = value.replace(/\s+/g, " ").trim();
+  return (
+    <Modal title={dialog.title} onClose={() => onClose(null)} size="sm">
+      <form
+        className="prompt-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (clean) onClose(clean);
+        }}
+      >
+        <label className="prompt-form__label">
+          <span>{dialog.label || "Nombre"}</span>
+          <input
+            autoFocus
+            className="input"
+            value={value}
+            maxLength={120}
+            placeholder={dialog.placeholder || ""}
+            onChange={(e) => setValue(e.target.value)}
+            onFocus={(e) => e.target.select()}
+          />
+        </label>
+        <div className="modal__footer modal__footer--inline">
+          <button type="button" className="btn btn--ghost" onClick={() => onClose(null)}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn--primary" disabled={!clean}>
+            {dialog.confirmLabel || "Aceptar"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function Dialogs() {
   const { dialog, closeDialog } = useUI();
   if (!dialog) return null;
@@ -197,5 +234,6 @@ export default function Dialogs() {
   if (dialog.type === "download") return <DownloadDialog onClose={() => close(false)} />;
   if (dialog.type === "shortcuts") return <ShortcutsDialog onClose={() => close(false)} />;
   if (dialog.type === "confirm") return <ConfirmDialog dialog={dialog} onClose={close} />;
+  if (dialog.type === "prompt") return <PromptDialog dialog={dialog} onClose={close} />;
   return null;
 }

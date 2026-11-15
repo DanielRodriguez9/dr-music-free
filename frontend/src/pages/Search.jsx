@@ -1,5 +1,6 @@
-import { useDeferredValue, useMemo } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import TrackList from "../components/TrackList";
+import YouTubeResults from "../components/YouTubeResults";
 import { useLibrary, useUI } from "../context/hooks";
 import { normalize, plural } from "../lib/format";
 
@@ -16,12 +17,16 @@ function artistCounts(songs) {
   return [...map.values()];
 }
 
+const LIBRARY_PREVIEW = 10;
+
 export default function Search() {
   const { songs } = useLibrary();
   const { query, searchFor } = useUI();
   // la lista se filtra un instante después de teclear: la escritura nunca se traba
   const deferred = useDeferredValue(query);
   const q = normalize(deferred.trim());
+  const [expanded, setExpanded] = useState({ q: "", all: false });
+  const showAll = expanded.q === q && expanded.all;
 
   const artists = useMemo(() => artistCounts(songs), [songs]);
 
@@ -33,7 +38,7 @@ export default function Search() {
       .map((s) => {
         const title = normalize(s.title);
         const artist = normalize(s.artist || "");
-        const extra = normalize(`${s.original_title || ""} ${s.album || ""}`);
+        const extra = normalize(`${s.original_title || ""} ${s.album || ""} ${s.genre || ""}`);
         if (!hit(`${title} ${artist} ${extra}`)) return null;
         // primero lo que empieza igual, luego título, luego artista
         const score = (title.startsWith(q) ? 0 : 2) + (title.includes(q) ? 0 : 1) + (artist.includes(q) ? 0 : 1);
@@ -83,12 +88,26 @@ export default function Search() {
           </div>
         </>
       )}
-      <h2 className="section-title">Canciones · {plural(results.songs.length, "resultado", "resultados")}</h2>
+      <div className="section-row">
+        <h2 className="section-title">En tu biblioteca · {plural(results.songs.length, "canción", "canciones")}</h2>
+        {results.songs.length > LIBRARY_PREVIEW && (
+          <button type="button" className="see-all" onClick={() => setExpanded({ q, all: !showAll })}>
+            {showAll ? "Mostrar menos" : `Mostrar todas (${results.songs.length})`}
+          </button>
+        )}
+      </div>
       {results.songs.length ? (
-        <TrackList songs={results.songs} contextLabel={`Búsqueda: ${deferred.trim()}`} showAdded={false} />
+        <TrackList
+          songs={showAll ? results.songs : results.songs.slice(0, LIBRARY_PREVIEW)}
+          contextLabel={`Búsqueda: ${deferred.trim()}`}
+          showAdded={false}
+          showGenre
+        />
       ) : (
-        <p className="empty">No hay canciones que coincidan. Prueba con otras palabras.</p>
+        <p className="muted search-none">Nada en tu biblioteca coincide con «{deferred.trim()}».</p>
       )}
+
+      <YouTubeResults query={deferred} />
     </div>
   );
 }

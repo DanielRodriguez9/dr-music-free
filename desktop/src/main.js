@@ -14,7 +14,9 @@ const ORIGIN = "app://drmusic";
 // DRMUSIC_DATA_DIR permite probar la app con otra carpeta sin tocar la real.
 const DATA_DIR = process.env.DRMUSIC_DATA_DIR || path.join(app.getPath("appData"), APP_NAME);
 app.setPath("userData", path.join(DATA_DIR, "electron"));
-app.setAppUserModelId("com.drmusic.free");
+// Con una carpeta de datos de prueba se usa otra identidad para que las pruebas (controles
+// multimedia de Windows) nunca toquen la app de verdad si está abierta al mismo tiempo.
+app.setAppUserModelId(process.env.DRMUSIC_DATA_DIR ? "com.drmusic.free.test" : "com.drmusic.free");
 
 const RESOURCES = app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "..");
 const FRONTEND_DIR = app.isPackaged ? path.join(RESOURCES, "frontend") : path.join(RESOURCES, "frontend", "dist");

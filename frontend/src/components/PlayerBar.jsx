@@ -1,7 +1,8 @@
 import {
-  ListMusic, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume, Volume1, Volume2, VolumeX,
+  CloudDownload, Globe, ListMusic, LoaderCircle, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume, Volume1, Volume2, VolumeX,
 } from "lucide-react";
-import { artistLabel } from "../api";
+import { useState } from "react";
+import { artistLabel, isOnline } from "../api";
 import { usePlayer, usePlayerTime, useUI } from "../context/hooks";
 import useSongActions from "../hooks/useSongActions";
 import { formatTime } from "../lib/format";
@@ -42,10 +43,12 @@ function VolumeIcon({ volume, muted }) {
 
 export default function PlayerBar() {
   const player = usePlayer();
-  const { current, isPlaying, queue, volume, muted } = player;
+  const { current, isPlaying, loading, queue, volume, muted } = player;
   const { searchFor, queueOpen, toggleQueue } = useUI();
-  const { toggleLike } = useSongActions();
+  const { toggleLike, downloadOnline } = useSongActions();
+  const [downloading, setDownloading] = useState(null); // id en línea que se está descargando
   const empty = !current;
+  const online = isOnline(current);
 
   return (
     <footer className="playerbar" aria-label="Reproductor">
@@ -57,6 +60,11 @@ export default function PlayerBar() {
               <span className="playerbar__title" title={current.title}>
                 {current.title}
               </span>
+              {online && (
+                <span className="badge badge--online playerbar__online" title="Suena desde YouTube sin descargar">
+                  <Globe size={11} /> En línea
+                </span>
+              )}
               {current.artist ? (
                 <button type="button" className="link playerbar__artist" onClick={() => searchFor(current.artist)}>
                   {current.artist}
@@ -65,7 +73,24 @@ export default function PlayerBar() {
                 <span className="playerbar__artist">{artistLabel(current)}</span>
               )}
             </div>
-            <LikeButton song={current} onToggle={toggleLike} size={18} />
+            {online ? (
+              <button
+                type="button"
+                className="btn btn--small btn--subtle playerbar__download"
+                disabled={downloading === current.id}
+                onClick={async () => {
+                  setDownloading(current.id);
+                  await downloadOnline(current);
+                  setDownloading(null);
+                }}
+                title="Guardar esta canción en tu biblioteca"
+              >
+                {downloading === current.id ? <LoaderCircle size={15} className="spin" /> : <CloudDownload size={15} />}
+                {downloading === current.id ? "Descargando" : "Descargar"}
+              </button>
+            ) : (
+              <LikeButton song={current} onToggle={toggleLike} size={18} />
+            )}
           </>
         ) : (
           <div className="playerbar__placeholder">
@@ -92,13 +117,20 @@ export default function PlayerBar() {
           </button>
           <button
             type="button"
-            className="play-btn"
+            className={`play-btn ${loading ? "is-loading" : ""}`}
             onClick={player.togglePlay}
             disabled={empty}
             aria-label={isPlaying ? "Pausar" : "Reproducir"}
-            title={isPlaying ? "Pausar (Espacio)" : "Reproducir (Espacio)"}
+            aria-busy={loading}
+            title={loading ? (online ? "Cargando el audio desde YouTube..." : "Cargando...") : isPlaying ? "Pausar (Espacio)" : "Reproducir (Espacio)"}
           >
-            {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+            {loading ? (
+              <LoaderCircle size={20} className="spin" />
+            ) : isPlaying ? (
+              <Pause size={20} fill="currentColor" />
+            ) : (
+              <Play size={20} fill="currentColor" />
+            )}
           </button>
           <button type="button" className="icon-btn" onClick={player.next} disabled={empty} aria-label="Siguiente" title="Siguiente (Ctrl + →)">
             <SkipForward size={20} fill="currentColor" />

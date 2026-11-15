@@ -4,23 +4,29 @@
 
 from contextlib import asynccontextmanager
 import json
+import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from config import Settings, settings as default_settings
-from db import Play, Song, counts_as_play, init_db, make_engine, make_session_factory, utcnow
+from db import (Genre, Play, Playlist, PlaylistItem, Song, counts_as_play, init_db, make_engine,
+                make_session_factory, utcnow)
 import ytdlp_tool
 from downloader import Downloader
 from library import is_youtube_url, safe_file, sync_file_status, youtube_id
+from youtube import YouTube, YouTubeError
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
+_VIDEO_ID = re.compile(r"^[0-9A-Za-z_-]{11}$")
+log = logging.getLogger("drmusic")
 
 
 # ==================== ESQUEMAS ====================
@@ -39,6 +45,7 @@ class SongOut(BaseModel):
     source: str
     status: str
     youtube_id: str | None
+    genre: str | None = None
     youtube_url: str | None
     thumbnail_url: str | None
     liked: bool
@@ -52,11 +59,40 @@ class SongPatch(BaseModel):
     title: str | None = None
     artist: str | None = None
     album: str | None = None
+    genre: str | None = None
     liked: bool | None = None
 
 
+class BulkPatch(BaseModel):
+    song_ids: list[int] = Field(min_length=1, max_length=20000)
+    genre: str | None = None  # "" o null quita el género
+    liked: bool | None = None
+
+
+class NameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class PlaylistIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    song_ids: list[int] = []
+
+
+class SongIdsIn(BaseModel):
+    song_ids: list[int] = Field(min_length=1, max_length=20000)
+
+
+class ItemIdsIn(BaseModel):
+    item_ids: list[int] = Field(max_length=20000)
+
+
 class PlayIn(BaseModel):
-    song_id: int
+    song_id: int | None = None
+    # escucha en línea (canción que no está descargada)
+    youtube_id: str | None = Field(default=None, pattern=r"^[0-9A-Za-z_-]{11}$")
+    title: str | None = Field(default=None, max_length=500)
+    artist: str | None = Field(default=None, max_length=300)
+    duration: float | None = Field(default=None, ge=0, le=24 * 3600)
     started_at: datetime
     listened_seconds: float = Field(ge=0, le=24 * 3600)
     end_reason: str = Field(pattern="^(ended|skipped|closed)$")
@@ -76,10 +112,27 @@ class PlayOut(BaseModel):
     end_reason: str
     skipped: bool
     counted: bool
+    youtube_id: str | None = None
+    online: bool = False
 
 
 class DownloadIn(BaseModel):
     url: str
+
+
+def playlist_out(pl: Playlist, items: list[PlaylistItem]) -> dict:
+    return {
+        "id": pl.id, "name": pl.name,
+        "created_at": pl.created_at.isoformat(), "updated_at": pl.updated_at.isoformat(),
+        "items": [{"id": it.id, "song_id": it.song_id} for it in items],
+    }
+
+
+def clean_name(name: str) -> str:
+    name = re.sub(r"\s+", " ", name or "").strip()
+    if not name:
+        raise HTTPException(400, "El nombre no puede estar vacío")
+    return name[:120]
 
 
 def song_out(song: Song) -> SongOut:
@@ -90,11 +143,12 @@ def song_out(song: Song) -> SongOut:
 
 # ==================== APP ====================
 
-def create_app(cfg: Settings | None = None, downloader: Downloader | None = None) -> FastAPI:
+def create_app(cfg: Settings | None = None, downloader: Downloader | None = None,
+               youtube: YouTube | None = None) -> FastAPI:
     cfg = cfg or default_settings
     cfg.ensure_dirs()
     engine = make_engine(cfg.db_path)
-    init_db(engine)
+    init_db(engine, cfg.db_path)
     sessions = make_session_factory(engine)
     sync_file_status(sessions, cfg.music_dir)
 
@@ -116,11 +170,15 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         exe_cmd=[str(ytdlp_exe)] if ytdlp_exe else None,
         js_runtime=cfg.ytdlp_js_runtime, exe_env=cfg.ytdlp_env,
     )
+    app.state.youtube = youtube or YouTube(
+        exe_cmd=[str(ytdlp_exe)] if ytdlp_exe else None,
+        js_runtime=cfg.ytdlp_js_runtime, exe_env=cfg.ytdlp_env,
+    )
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cfg.cors_origins,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         allow_headers=["*"],
     )
 
@@ -178,9 +236,27 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         for key, value in patch.model_dump(exclude_unset=True).items():
             if key == "title" and not (value or "").strip():
                 raise HTTPException(400, "El título no puede estar vacío")
+            if key == "genre":
+                value = ensure_genre(db, value)
             setattr(song, key, value.strip() if isinstance(value, str) else value)
         db.commit()
         return song_out(song)
+
+    @app.post("/songs/bulk", response_model=list[SongOut])
+    def bulk_update(body: BulkPatch, db: Session = Depends(get_db)):
+        """Cambia el género o el me gusta de varias canciones a la vez."""
+        fields = body.model_dump(exclude_unset=True)
+        values = {}
+        if "genre" in fields:
+            values["genre"] = ensure_genre(db, body.genre)
+        if body.liked is not None:
+            values["liked"] = body.liked
+        if not values:
+            raise HTTPException(400, "Nada que cambiar")
+        ids = list(dict.fromkeys(body.song_ids))
+        db.execute(update(Song).where(Song.id.in_(ids)).values(**values))
+        db.commit()
+        return [song_out(s) for s in db.scalars(select(Song).where(Song.id.in_(ids)).order_by(Song.id))]
 
     @app.get("/songs/{song_id}/audio")
     def song_audio(song_id: int, db: Session = Depends(get_db)):
@@ -207,6 +283,231 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
     def get_thumbnail(song_id: int, db: Session = Depends(get_db)):
         return {"thumbnail_url": get_song_or_404(song_id, db).thumbnail_url}
 
+    # ---------- géneros ----------
+    def ensure_genre(db: Session, name: str | None) -> str | None:
+        """Devuelve el nombre del género tal como está guardado; si no existe, lo crea."""
+        if name is None or not name.strip():
+            return None
+        name = clean_name(name)
+        existing = db.scalar(select(Genre).where(func.lower(Genre.name) == name.lower()))
+        if existing:
+            return existing.name
+        pos = db.scalar(select(func.coalesce(func.max(Genre.position), -1))) + 1
+        db.add(Genre(name=name, position=pos))
+        db.flush()
+        return name
+
+    def genres_out(db: Session) -> list[dict]:
+        counts = dict(db.execute(select(Song.genre, func.count(Song.id)).where(Song.genre.is_not(None))
+                                 .group_by(Song.genre)).all())
+        return [{"id": g.id, "name": g.name, "count": counts.get(g.name, 0)}
+                for g in db.scalars(select(Genre).order_by(Genre.position, Genre.id))]
+
+    @app.get("/genres/")
+    def list_genres(db: Session = Depends(get_db)):
+        return genres_out(db)
+
+    @app.post("/genres/", status_code=201)
+    def create_genre(body: NameIn, db: Session = Depends(get_db)):
+        name = clean_name(body.name)
+        if db.scalar(select(Genre).where(func.lower(Genre.name) == name.lower())):
+            raise HTTPException(409, f"Ya existe el género «{name}»")
+        ensure_genre(db, name)
+        db.commit()
+        return genres_out(db)
+
+    @app.patch("/genres/{genre_id}")
+    def rename_genre(genre_id: int, body: NameIn, db: Session = Depends(get_db)):
+        genre = db.get(Genre, genre_id)
+        if not genre:
+            raise HTTPException(404, "Género no encontrado")
+        name = clean_name(body.name)
+        other = db.scalar(select(Genre).where(func.lower(Genre.name) == name.lower(), Genre.id != genre_id))
+        if other:
+            raise HTTPException(409, f"Ya existe el género «{name}»")
+        db.execute(update(Song).where(Song.genre == genre.name).values(genre=name))
+        genre.name = name
+        db.commit()
+        return genres_out(db)
+
+    @app.delete("/genres/{genre_id}")
+    def delete_genre(genre_id: int, db: Session = Depends(get_db)):
+        genre = db.get(Genre, genre_id)
+        if not genre:
+            raise HTTPException(404, "Género no encontrado")
+        db.execute(update(Song).where(Song.genre == genre.name).values(genre=None))
+        db.delete(genre)
+        db.commit()
+        return genres_out(db)
+
+    # ---------- listas de reproducción ----------
+    def get_playlist_or_404(playlist_id: int, db: Session) -> Playlist:
+        pl = db.get(Playlist, playlist_id)
+        if not pl:
+            raise HTTPException(404, "Lista no encontrada")
+        return pl
+
+    def items_of(db: Session, playlist_id: int) -> list[PlaylistItem]:
+        return list(db.scalars(select(PlaylistItem).where(PlaylistItem.playlist_id == playlist_id)
+                               .order_by(PlaylistItem.position, PlaylistItem.id)))
+
+    def add_items(db: Session, pl: Playlist, song_ids: list[int]) -> tuple[int, int]:
+        items = items_of(db, pl.id)
+        have = {it.song_id for it in items}
+        valid = set(db.scalars(select(Song.id).where(Song.id.in_(song_ids))))
+        pos = (items[-1].position + 1) if items else 0
+        added = 0
+        for sid in dict.fromkeys(song_ids):
+            if sid in have or sid not in valid:
+                continue
+            db.add(PlaylistItem(playlist_id=pl.id, song_id=sid, position=pos))
+            pos += 1
+            added += 1
+        pl.updated_at = utcnow()
+        return added, len(song_ids) - added
+
+    @app.get("/playlists/")
+    def list_playlists(db: Session = Depends(get_db)):
+        pls = list(db.scalars(select(Playlist).order_by(Playlist.created_at, Playlist.id)))
+        by_pl: dict[int, list[PlaylistItem]] = {p.id: [] for p in pls}
+        for it in db.scalars(select(PlaylistItem).order_by(PlaylistItem.position, PlaylistItem.id)):
+            by_pl.setdefault(it.playlist_id, []).append(it)
+        return [playlist_out(p, by_pl[p.id]) for p in pls]
+
+    @app.get("/playlists/{playlist_id}")
+    def get_playlist(playlist_id: int, db: Session = Depends(get_db)):
+        pl = get_playlist_or_404(playlist_id, db)
+        return playlist_out(pl, items_of(db, pl.id))
+
+    @app.post("/playlists/", status_code=201)
+    def create_playlist(body: PlaylistIn, db: Session = Depends(get_db)):
+        pl = Playlist(name=clean_name(body.name))
+        db.add(pl)
+        db.flush()
+        if body.song_ids:
+            add_items(db, pl, body.song_ids)
+        db.commit()
+        return playlist_out(pl, items_of(db, pl.id))
+
+    @app.patch("/playlists/{playlist_id}")
+    def rename_playlist(playlist_id: int, body: NameIn, db: Session = Depends(get_db)):
+        pl = get_playlist_or_404(playlist_id, db)
+        pl.name = clean_name(body.name)
+        pl.updated_at = utcnow()
+        db.commit()
+        return playlist_out(pl, items_of(db, pl.id))
+
+    @app.delete("/playlists/{playlist_id}")
+    def delete_playlist(playlist_id: int, db: Session = Depends(get_db)):
+        pl = get_playlist_or_404(playlist_id, db)
+        db.execute(delete(PlaylistItem).where(PlaylistItem.playlist_id == pl.id))
+        db.delete(pl)
+        db.commit()
+        return {"status": "success"}
+
+    @app.post("/playlists/{playlist_id}/songs")
+    def add_to_playlist(playlist_id: int, body: SongIdsIn, db: Session = Depends(get_db)):
+        pl = get_playlist_or_404(playlist_id, db)
+        added, skipped = add_items(db, pl, body.song_ids)
+        db.commit()
+        return {"playlist": playlist_out(pl, items_of(db, pl.id)), "added": added, "skipped": skipped}
+
+    @app.post("/playlists/{playlist_id}/remove")
+    def remove_from_playlist(playlist_id: int, body: ItemIdsIn, db: Session = Depends(get_db)):
+        pl = get_playlist_or_404(playlist_id, db)
+        db.execute(delete(PlaylistItem).where(PlaylistItem.playlist_id == pl.id,
+                                              PlaylistItem.id.in_(body.item_ids)))
+        pl.updated_at = utcnow()
+        db.commit()
+        return playlist_out(pl, items_of(db, pl.id))
+
+    @app.put("/playlists/{playlist_id}/order")
+    def reorder_playlist(playlist_id: int, body: ItemIdsIn, db: Session = Depends(get_db)):
+        pl = get_playlist_or_404(playlist_id, db)
+        items = {it.id: it for it in items_of(db, pl.id)}
+        if sorted(body.item_ids) != sorted(items):
+            raise HTTPException(409, "La lista cambió mientras la reordenabas; vuelve a intentarlo")
+        for pos, item_id in enumerate(body.item_ids):
+            items[item_id].position = pos
+        pl.updated_at = utcnow()
+        db.commit()
+        return playlist_out(pl, items_of(db, pl.id))
+
+    # ---------- YouTube en línea ----------
+    def yt_error(exc: YouTubeError) -> JSONResponse:
+        status = 503 if exc.kind == "offline" else 502
+        log.warning("YouTube: %s (%s)", exc.message, exc.kind)  # queda en logs/backend.log
+        return JSONResponse({"detail": exc.message, "kind": exc.kind}, status_code=status)
+
+    def check_video_id(video_id: str) -> None:
+        if not _VIDEO_ID.match(video_id):
+            raise HTTPException(400, "Identificador de video no válido")
+
+    @app.get("/youtube/status")
+    def youtube_status(request: Request):
+        return {"online": request.app.state.youtube.online()}
+
+    @app.get("/youtube/search")
+    def youtube_search(q: str, request: Request, limit: int = 12, db: Session = Depends(get_db)):
+        q = q.strip()[:200]
+        if len(q) < 2:
+            return {"online": True, "results": []}
+        yt = request.app.state.youtube
+        if not yt.online():
+            return {"online": False, "results": []}
+        try:
+            results = yt.search(q, min(max(limit, 1), 30))
+        except YouTubeError as exc:
+            if exc.kind == "offline":
+                return {"online": False, "results": []}
+            return yt_error(exc)
+        ids = [r["youtube_id"] for r in results]
+        local = dict(db.execute(select(Song.youtube_id, Song.id).where(Song.youtube_id.in_(ids),
+                                                                     Song.status == "ok")).all())
+        return {"online": True, "results": [{**r, "song_id": local.get(r["youtube_id"])} for r in results]}
+
+    @app.get("/stream/{video_id}/info")
+    def stream_info(video_id: str, request: Request, prefetch: bool = False):
+        """Prepara el audio en línea (y sirve para saber por qué falló)."""
+        check_video_id(video_id)
+        try:
+            st = request.app.state.youtube.resolve(video_id, background=prefetch)
+        except YouTubeError as exc:
+            if exc.kind == "busy":
+                return JSONResponse({"ok": False, "busy": True}, status_code=202)
+            return yt_error(exc)
+        return {"ok": True, "title": st.title, "duration": st.duration, "mime": st.mime}
+
+    @app.get("/stream/{video_id}")
+    def stream_audio(video_id: str, request: Request):
+        """Audio de YouTube sin descargarlo: se reenvía al reproductor por partes."""
+        check_video_id(video_id)
+        try:
+            resp, st = request.app.state.youtube.open_stream(video_id, request.headers.get("range"))
+        except YouTubeError as exc:
+            return yt_error(exc)
+        except Exception as exc:  # noqa: BLE001 - p. ej. 416 fuera de rango
+            code = getattr(exc, "code", 502)
+            log.warning("Audio en línea %s: %r", video_id, exc)
+            return JSONResponse({"detail": str(exc)}, status_code=code if code == 416 else 502)
+
+        headers = {"Accept-Ranges": "bytes", "Cache-Control": "no-store"}
+        for name in ("Content-Length", "Content-Range"):
+            if resp.headers.get(name):
+                headers[name] = resp.headers[name]
+
+        def body():
+            try:
+                while chunk := resp.read(64 * 1024):
+                    yield chunk
+            except OSError:
+                pass  # el reproductor cerró la conexión (salto o cambio de canción)
+            finally:
+                resp.close()
+
+        return StreamingResponse(body(), status_code=resp.status, headers=headers,
+                                 media_type=resp.headers.get("Content-Type") or st.mime)
+
     # ---------- historial de reproducción ----------
     @app.post("/plays/", status_code=201)
     async def record_play(request: Request):
@@ -216,26 +517,39 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         except (ValueError, ValidationError) as exc:
             raise HTTPException(422, f"Datos de reproducción no válidos: {exc}") from exc
 
+        if body.song_id is None and body.youtube_id is None:
+            raise HTTPException(422, "Falta la canción")
+
         with request.app.state.sessions() as db:
-            song = get_song_or_404(body.song_id, db)
+            online = body.song_id is None
+            if online:
+                # si ya está en la biblioteca (p. ej. se descargó mientras sonaba), cuenta para ella
+                song = db.scalar(select(Song).where(Song.youtube_id == body.youtube_id))
+            else:
+                song = get_song_or_404(body.song_id, db)
+            duration = song.duration if song else body.duration
             listened = body.listened_seconds
-            if song.duration:
-                listened = min(listened, song.duration + 5)
-            counted = counts_as_play(listened, song.duration)
+            if duration:
+                listened = min(listened, duration + 5)
+            counted = counts_as_play(listened, duration)
             started = body.started_at if body.started_at.tzinfo else body.started_at.replace(tzinfo=timezone.utc)
             play = Play(
-                song_id=song.id, song_title=song.title, song_artist=song.artist,
+                song_id=song.id if song else None,
+                song_title=song.title if song else (body.title or "Canción en línea"),
+                song_artist=song.artist if song else body.artist,
                 started_at=started, ended_at=utcnow(), listened_seconds=round(listened, 1),
-                song_duration=song.duration, end_reason=body.end_reason,
+                song_duration=duration, end_reason=body.end_reason,
                 skipped=body.end_reason == "skipped", counted=counted,
+                youtube_id=song.youtube_id if song else body.youtube_id, online=online,
             )
             db.add(play)
-            song.last_played_at = play.ended_at
-            if counted:
-                song.play_count += 1
+            if song:
+                song.last_played_at = play.ended_at
+                if counted:
+                    song.play_count += 1
             db.commit()
             return {"play": PlayOut.model_validate(play).model_dump(mode="json"),
-                    "song": song_out(song).model_dump(mode="json")}
+                    "song": song_out(song).model_dump(mode="json") if song else None}
 
     @app.get("/plays/", response_model=list[PlayOut])
     def list_plays(limit: int = 200, days: int | None = None, counted_only: bool = False,

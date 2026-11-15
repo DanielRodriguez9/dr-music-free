@@ -1,6 +1,6 @@
-import { History as HistoryIcon } from "lucide-react";
+import { Globe, History as HistoryIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, artistLabel, errorMessage } from "../api";
+import { api, artistLabel, errorMessage, onlineTrack } from "../api";
 import Cover from "../components/Cover";
 import { useLibrary, useUI } from "../context/hooks";
 import useSongActions from "../hooks/useSongActions";
@@ -42,7 +42,7 @@ function PlayBadge({ play }) {
 }
 
 export default function History() {
-  const { byId, playsVersion } = useLibrary();
+  const { byId, byYoutubeId, registerOnline, playsVersion } = useLibrary();
   const { openMenu } = useUI();
   const { playFrom } = useSongActions();
   const [plays, setPlays] = useState(null);
@@ -114,14 +114,28 @@ export default function History() {
           <h2 className="section-title">{g.label}</h2>
           <ol className="history">
             {g.items.map((p) => {
-              const song = p.song_id != null ? byId.get(p.song_id) : null;
+              // escucha en línea: si después se descargó, se usa la de la biblioteca
+              const song =
+                (p.song_id != null ? byId.get(p.song_id) : null) ??
+                (p.youtube_id ? byYoutubeId.get(p.youtube_id) : null) ??
+                (p.online && p.youtube_id
+                  ? onlineTrack({ youtube_id: p.youtube_id, title: p.song_title, artist: p.song_artist, duration: p.song_duration })
+                  : null);
               const shown = song ?? { id: `h${p.id}`, title: p.song_title || "Canción eliminada", artist: p.song_artist };
+              const use = (fn) => () => {
+                if (!song) return;
+                if (song.online) registerOnline([song]);
+                fn();
+              };
               return (
                 <li
                   key={p.id}
                   className={`history__item ${song ? "" : "is-deleted"}`}
-                  onDoubleClick={() => song && playFrom(song, [song], "Historial")}
-                  onContextMenu={(e) => song && openMenu(e, song, { list: [song], label: "Historial" })}
+                  onDoubleClick={use(() => playFrom(song, [song], "Historial"))}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    use(() => openMenu(e, song, { list: [song], label: "Historial" }))();
+                  }}
                 >
                   <time className="history__time" dateTime={p.started_at}>
                     {timeFmt.format(p.date)}
@@ -136,6 +150,11 @@ export default function History() {
                     {p.song_duration ? <span className="muted"> / {formatTime(p.song_duration)}</span> : null}
                   </span>
                   <span className="history__badges">
+                    {p.online && (
+                      <span className="badge badge--online" title="Se escuchó desde YouTube sin descargar">
+                        <Globe size={11} /> En línea
+                      </span>
+                    )}
                     <PlayBadge play={p} />
                   </span>
                 </li>

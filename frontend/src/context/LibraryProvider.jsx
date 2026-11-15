@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE, api, errorMessage, isPlayable, waitForDownload } from "../api";
+import { load, save } from "../lib/storage";
 import { LibraryContext } from "./contexts";
 
 export default function LibraryProvider({ children }) {
@@ -8,6 +9,29 @@ export default function LibraryProvider({ children }) {
   const [error, setError] = useState(null);
   const [downloads, setDownloads] = useState([]); // trabajos activos o recientes
   const [playsVersion, setPlaysVersion] = useState(0); // sube cada vez que se guarda una escucha
+  // canciones en línea (YouTube sin descargar) que están o estuvieron en la cola: "yt:<id>" -> datos
+  const [online, setOnline] = useState(() => {
+    const saved = load("onlineTracks", []);
+    return new Map(Array.isArray(saved) ? saved.filter((t) => t?.id).map((t) => [t.id, t]) : []);
+  });
+
+  useEffect(() => {
+    // se guardan las últimas 300 para poder restaurar la cola al reabrir
+    save("onlineTracks", [...online.values()].slice(-300));
+  }, [online]);
+
+  /** Registra canciones en línea para que el reproductor las conozca. */
+  const registerOnline = useCallback((tracks) => {
+    setOnline((prev) => {
+      if (tracks.every((t) => prev.get(t.id)?.title === t.title)) return prev;
+      const next = new Map(prev);
+      for (const t of tracks) {
+        next.delete(t.id); // al final: las más recientes se conservan
+        next.set(t.id, t);
+      }
+      return next;
+    });
+  }, []);
 
   const fetchSongs = useCallback(
     () =>
@@ -31,7 +55,12 @@ export default function LibraryProvider({ children }) {
     fetchSongs().catch(() => {});
   }, [fetchSongs]);
 
-  const byId = useMemo(() => new Map(songs.map((s) => [s.id, s])), [songs]);
+  const byId = useMemo(() => {
+    const map = new Map(online);
+    for (const s of songs) map.set(s.id, s);
+    return map;
+  }, [songs, online]);
+  const byYoutubeId = useMemo(() => new Map(songs.filter((s) => s.youtube_id).map((s) => [s.youtube_id, s])), [songs]);
   const playable = useMemo(() => songs.filter(isPlayable), [songs]);
 
   const stats = useMemo(() => {
@@ -52,6 +81,12 @@ export default function LibraryProvider({ children }) {
 
   const replaceSong = (song) => setSongs((prev) => prev.map((s) => (s.id === song.id ? song : s)));
 
+  /** Sustituye varias canciones por su versión nueva (p. ej. tras cambiar el género). */
+  const applySongs = useCallback((list) => {
+    const map = new Map(list.map((s) => [s.id, s]));
+    setSongs((prev) => prev.map((s) => map.get(s.id) ?? s));
+  }, []);
+
   /** Guarda una escucha en el historial. Con beacon=true se envía aunque se cierre la ventana. */
   const recordPlay = useCallback((payload, { beacon = false } = {}) => {
     const body = JSON.stringify(payload);
@@ -62,7 +97,7 @@ export default function LibraryProvider({ children }) {
     api
       .post("/plays/", body, { headers: { "Content-Type": "text/plain" } })
       .then(({ data }) => {
-        replaceSong(data.song);
+        if (data.song) replaceSong(data.song);
         setPlaysVersion((v) => v + 1);
       })
       .catch(() => {});
@@ -115,6 +150,9 @@ export default function LibraryProvider({ children }) {
     () => ({
       songs,
       byId,
+      byYoutubeId,
+      registerOnline,
+      applySongs,
       playable,
       stats,
       status,
@@ -129,7 +167,7 @@ export default function LibraryProvider({ children }) {
       downloads,
       activeDownloads,
     }),
-    [songs, byId, playable, stats, status, error, fetchSongs, deleteSong, updateSong, recordPlay, playsVersion, toggleLike, download, downloads, activeDownloads],
+    [songs, byId, byYoutubeId, registerOnline, applySongs, playable, stats, status, error, fetchSongs, deleteSong, updateSong, recordPlay, playsVersion, toggleLike, download, downloads, activeDownloads],
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
