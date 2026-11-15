@@ -53,7 +53,7 @@ Capturas de Pantalla
 
 | Capa | Tecnologías |
 |------|-------------|
-| **Backend** | Python, FastAPI, SQLAlchemy, PostgreSQL |
+| **Backend** | Python, FastAPI, SQLAlchemy, SQLite |
 | **Frontend** | React, Vite, Axios, Lucide Icons |
 | **Motor** | yt-dlp, FFmpeg |
 
@@ -62,7 +62,7 @@ Capturas de Pantalla
 ## ✨ Características
 
 - ✅ Descarga de audio de YouTube
-- ✅ Biblioteca local con PostgreSQL
+- ✅ Biblioteca local con SQLite (sin servidor de base de datos)
 - ✅ Reproductor (play/pause/volumen)
 - ✅ Barra de progreso interactiva
 - ✅ Búsqueda en tiempo real
@@ -100,7 +100,7 @@ Python 3.12+
 
 Node.js 18+
 
-PostgreSQL 15+
+(Ya no hace falta PostgreSQL)
 
 FFmpeg instalado en el sistema
 

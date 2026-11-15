@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
+import { api, audioUrl, waitForDownload } from "./api";
 import toast, { Toaster } from "react-hot-toast";
 import Sidebar from "./components/Sidebar";
 import DownloadBar from "./components/DownloadBar";
@@ -30,43 +30,39 @@ function App() {
 
   const loadSongs = async () => {
     try {
-      const response = await axios.get("http://127.0.0.1:8000/songs/");
+      const response = await api.get("/songs/");
       setSongs(response.data);
+      setThumbnails(
+        Object.fromEntries(
+          response.data.filter((s) => s.thumbnail_url).map((s) => [s.id, s.thumbnail_url]),
+        ),
+      );
     } catch (error) {
       console.error(error);
       toast.error("Error al cargar tu biblioteca");
     }
   };
 
-  const loadThumbnail = async (songId) => {
-    if (thumbnails[songId]) return;
-    try {
-      const response = await axios.get(`http://127.0.0.1:8000/thumb/${songId}`);
-      if (response.data.thumbnail_url) {
-        setThumbnails((prev) => ({
-          ...prev,
-          [songId]: response.data.thumbnail_url,
-        }));
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  // Las carátulas ya vienen con la lista de canciones
+  const loadThumbnail = () => {};
+
+  // Solo se puede reproducir lo que tiene archivo
+  const playable = songs.filter((s) => s.public_url);
 
   useEffect(() => {
     loadSongs();
   }, []);
 
   const getNextSong = () => {
-    if (songs.length === 0) return null;
+    if (playable.length === 0) return null;
     if (shuffle) {
-      const otherSongs = songs.filter((s) => s.id !== currentSong?.id);
+      const otherSongs = playable.filter((s) => s.id !== currentSong?.id);
       if (otherSongs.length === 0) return null;
       return otherSongs[Math.floor(Math.random() * otherSongs.length)];
     } else {
-      const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
-      if (currentIndex !== -1 && currentIndex + 1 < songs.length) {
-        return songs[currentIndex + 1];
+      const currentIndex = playable.findIndex((s) => s.id === currentSong?.id);
+      if (currentIndex !== -1 && currentIndex + 1 < playable.length) {
+        return playable[currentIndex + 1];
       }
       return null;
     }
@@ -82,10 +78,15 @@ function App() {
         setIsPlaying(true);
       }
     } else {
+      const src = audioUrl(song);
+      if (!src) {
+        toast.error("Falta el archivo de esta canción. Vuelve a descargarla con su enlace.");
+        return;
+      }
       setCurrentSong(song);
-      const audioUrl = `http://127.0.0.1:8000${song.public_url}`;
+      api.post(`/songs/${song.id}/play`).catch(() => {});
       if (audioRef.current) {
-        audioRef.current.src = audioUrl;
+        audioRef.current.src = src;
         audioRef.current.load();
         audioRef.current.play().catch((e) => console.error(e));
         setIsPlaying(true);
@@ -157,8 +158,8 @@ function App() {
     if (shuffle) {
       nextSong();
     } else {
-      const currentIndex = songs.findIndex((s) => s.id === currentSong?.id);
-      if (currentIndex > 0) playSong(songs[currentIndex - 1]);
+      const currentIndex = playable.findIndex((s) => s.id === currentSong?.id);
+      if (currentIndex > 0) playSong(playable[currentIndex - 1]);
     }
   };
 
@@ -189,44 +190,32 @@ function App() {
       return;
     }
 
-    const loadingToast = toast.loading("⏳ Descargando canción...");
+    const loadingToast = toast.loading("⏳ Preparando descarga...");
 
     try {
       setLoading(true);
       setDownloadProgress(0);
 
-      const progressInterval = setInterval(() => {
-        setDownloadProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 500);
+      const { data } = await api.post("/downloads/", { url });
 
-      const apiUrl = `http://127.0.0.1:8000/download/?url=${encodeURIComponent(url)}`;
-      const response = await axios.post(apiUrl);
-
-      clearInterval(progressInterval);
-      setDownloadProgress(100);
-
-      if (response.data.status === "exists") {
-        toast.error("❌ Esa canción ya fue descargada");
+      if (data.status === "exists") {
+        toast.error(`Ya está en tu biblioteca: ${data.song.title}`);
       } else {
-        toast.success(`✅ ${response.data.song}`, {
+        const job = await waitForDownload(data.job.id, (j) => {
+          setDownloadProgress(Math.max(j.progress, 2));
+          const msg = j.status === "processing" ? "🎛️ Convirtiendo a MP3..." : `⏳ Descargando... ${Math.round(j.progress)}%`;
+          toast.loading(msg, { id: loadingToast });
+        });
+        if (job.status === "error") throw new Error(job.error);
+        toast.success(`✅ ${job.title}`, {
           duration: 4000,
           icon: "🎵",
-          style: {
-            background: "#0ea5e9",
-            color: "#fff",
-            fontWeight: "bold",
-          },
+          style: { background: "#0ea5e9", color: "#fff", fontWeight: "bold" },
         });
+        await loadSongs();
       }
 
       setUrl("");
-      await loadSongs();
       setTimeout(() => setDownloadProgress(0), 1000);
     } catch (error) {
       toast.error(`❌ Error: ${error.response?.data?.detail || error.message}`);

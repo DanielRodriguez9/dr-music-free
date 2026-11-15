@@ -1,186 +1,205 @@
 # DR Music Free - Backend API
 # Creado por Daniel Rodríguez
-# Descarga música de YouTube y gestiona biblioteca local
+# Biblioteca local de música + descargas desde YouTube
 
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
-from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
+from datetime import datetime
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-import yt_dlp
-import os
-from dotenv import load_dotenv
-import urllib.parse
-import re
-from database import SessionLocal, Song, init_db
 
-# ==================== CONFIGURACIÓN INICIAL ====================
+from config import Settings, settings as default_settings
+from db import Song, init_db, make_engine, make_session_factory, utcnow
+from downloader import Downloader
+from library import is_youtube_url, safe_file, youtube_id
 
-load_dotenv()
-
-app = FastAPI(
-    title="DR Music Free API",
-    description="Música gratis sin anuncios - Creado por Daniel Rodríguez",
-    version="1.0.0"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-init_db()
-
-MUSIC_PATH = os.getenv("MUSIC_PATH", "./music")
-os.makedirs(MUSIC_PATH, exist_ok=True)
-
-app.mount("/music", StaticFiles(directory=MUSIC_PATH), name="music")
-
-# ==================== DEPENDENCIAS ====================
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# ==================== ENDPOINTS ====================
-
-@app.get("/")
-def home():
-    return {
-        "message": "🎵 DR Music Free API funcionando!",
-        "version": "1.0.0",
-        "author": "Daniel Rodríguez"
-    }
+VERSION = "2.0.0"
 
 
-@app.post("/download/")
-def download_song(url: str, db: Session = Depends(get_db)):
+# ==================== ESQUEMAS ====================
 
-    if not ("youtube.com" in url or "youtu.be" in url):
-        raise HTTPException(400, "Solo se permiten URLs de YouTube")
+class SongOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    existing_song = db.query(Song).filter(Song.youtube_url == url).first()
-    if existing_song:
+    id: int
+    title: str
+    artist: str | None
+    album: str | None
+    original_title: str | None
+    duration: float | None
+    filename: str | None
+    file_size: int | None
+    source: str
+    status: str
+    youtube_id: str | None
+    youtube_url: str | None
+    thumbnail_url: str | None
+    liked: bool
+    play_count: int
+    last_played_at: datetime | None
+    created_at: datetime
+    public_url: str | None = None
+
+
+class SongPatch(BaseModel):
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    liked: bool | None = None
+
+
+class DownloadIn(BaseModel):
+    url: str
+
+
+def song_out(song: Song) -> SongOut:
+    out = SongOut.model_validate(song)
+    out.public_url = f"/songs/{song.id}/audio" if song.status == "ok" else None
+    return out
+
+
+# ==================== APP ====================
+
+def create_app(cfg: Settings | None = None, downloader: Downloader | None = None) -> FastAPI:
+    cfg = cfg or default_settings
+    cfg.ensure_dirs()
+    engine = make_engine(cfg.db_path)
+    init_db(engine)
+    sessions = make_session_factory(engine)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        engine.dispose()
+
+    app = FastAPI(title="DR Music Free API", version=VERSION, lifespan=lifespan)
+    app.state.settings = cfg
+    app.state.sessions = sessions
+    app.state.downloader = downloader or Downloader(sessions, cfg.music_dir, cfg.ffmpeg_path)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.cors_origins,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["*"],
+    )
+
+    def get_db(request: Request):
+        with request.app.state.sessions() as db:
+            yield db
+
+    def get_song_or_404(song_id: int, db: Session) -> Song:
+        song = db.get(Song, song_id)
+        if not song:
+            raise HTTPException(404, "Canción no encontrada")
+        return song
+
+    # ---------- general ----------
+    @app.get("/")
+    def home():
+        return {"message": "🎵 DR Music Free API funcionando!", "version": VERSION}
+
+    @app.get("/stats/")
+    def get_stats(db: Session = Depends(get_db)):
+        total = db.scalar(select(func.count(Song.id)))
+        ok = db.scalar(select(func.count(Song.id)).where(Song.status == "ok"))
+        size = db.scalar(select(func.coalesce(func.sum(Song.file_size), 0)).where(Song.status == "ok"))
+        duration = db.scalar(select(func.coalesce(func.sum(Song.duration), 0)).where(Song.status == "ok"))
         return {
-            "status": "exists",
-            "message": "La canción ya existe en la biblioteca",
-            "song": existing_song.title
+            "total_songs": total,
+            "available_songs": ok,
+            "missing_songs": total - ok,
+            "total_size_mb": round(size / (1024 * 1024), 2),
+            "total_duration_hours": round(duration / 3600, 1),
+            "music_path": str(cfg.music_dir),
         }
 
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'noplaylist': True,
-        # Si FFMPEG_PATH no está en .env, yt-dlp busca ffmpeg en el PATH
-        **({'ffmpeg_location': os.getenv("FFMPEG_PATH")} if os.getenv("FFMPEG_PATH") else {}),
-        
-        # Configuración robusta para evitar 403
-        'headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Sec-Fetch-Mode': 'navigate',
-            'Referer': 'https://www.youtube.com/',
-        },
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web', 'mweb', 'ios', 'android'],
-                'player_skip': ['player_response', 'inner_streaming'],
-            }
-        },
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'postprocessor_args': ['-ar', '44100'],
-        'outtmpl': os.path.join(MUSIC_PATH, '%(title)s.%(ext)s'),
-        'quiet': False,  # Cambiado a False para ver errores
-        'no_warnings': False,
-        'force_generic_extractor': True,  # A veces ayuda a evitar bloqueos
-    }
+    # ---------- canciones ----------
+    @app.get("/songs/", response_model=list[SongOut])
+    def list_songs(db: Session = Depends(get_db)):
+        return [song_out(s) for s in db.scalars(select(Song).order_by(Song.id))]
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            original_filename = ydl.prepare_filename(info)
-            filename = os.path.splitext(original_filename)[0] + ".mp3"
+    @app.get("/songs/{song_id}", response_model=SongOut)
+    def get_song(song_id: int, db: Session = Depends(get_db)):
+        return song_out(get_song_or_404(song_id, db))
 
-            # Debug: imprime la ruta para verificar
-            print(f"Archivo MP3 esperado: {filename}")
-            print(f"¿Existe? {os.path.exists(filename)}")
+    @app.patch("/songs/{song_id}", response_model=SongOut)
+    def update_song(song_id: int, patch: SongPatch, db: Session = Depends(get_db)):
+        song = get_song_or_404(song_id, db)
+        for key, value in patch.model_dump(exclude_unset=True).items():
+            if key == "title" and not (value or "").strip():
+                raise HTTPException(400, "El título no puede estar vacío")
+            setattr(song, key, value.strip() if isinstance(value, str) else value)
+        db.commit()
+        return song_out(song)
 
-            new_song = Song(
-                title=info.get('title'),
-                file_path=filename,
-                youtube_url=url
-            )
-            db.add(new_song)
-            db.commit()
-            db.refresh(new_song)
+    @app.post("/songs/{song_id}/play", response_model=SongOut)
+    def register_play(song_id: int, db: Session = Depends(get_db)):
+        song = get_song_or_404(song_id, db)
+        song.play_count += 1
+        song.last_played_at = utcnow()
+        db.commit()
+        return song_out(song)
 
-            return {
-                "status": "success",
-                "song": info.get('title'),
-                "id": new_song.id,
-                "filename": os.path.basename(filename)
-            }
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        raise HTTPException(500, detail=str(e))
+    @app.get("/songs/{song_id}/audio")
+    def song_audio(song_id: int, db: Session = Depends(get_db)):
+        song = get_song_or_404(song_id, db)
+        path = safe_file(cfg.music_dir, song.filename)
+        if not path:
+            raise HTTPException(404, "El archivo de audio no existe")
+        return FileResponse(path)
 
-@app.get("/songs/")
-def list_songs(db: Session = Depends(get_db)):
-    songs = db.query(Song).all()
-    for song in songs:
-        filename = os.path.basename(song.file_path)
-        song.public_url = f"/music/{urllib.parse.quote(filename)}"
-    return songs
+    @app.delete("/songs/{song_id}")
+    def delete_song(song_id: int, db: Session = Depends(get_db)):
+        song = get_song_or_404(song_id, db)
+        shared = db.scalar(
+            select(func.count(Song.id)).where(Song.filename == song.filename, Song.id != song.id)
+        ) if song.filename else 0
+        path = safe_file(cfg.music_dir, song.filename)
+        if path and not shared:
+            path.unlink()
+        db.delete(song)
+        db.commit()
+        return {"status": "success", "message": "Canción eliminada"}
 
-@app.get("/songs/{song_id}")
-def get_song(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).filter(Song.id == song_id).first()
-    if not song:
-        raise HTTPException(404, "Canción no encontrada")
-    filename = os.path.basename(song.file_path)
-    song.public_url = f"/music/{urllib.parse.quote(filename)}"
-    return song
+    @app.get("/thumb/{song_id}")
+    def get_thumbnail(song_id: int, db: Session = Depends(get_db)):
+        return {"thumbnail_url": get_song_or_404(song_id, db).thumbnail_url}
 
-@app.delete("/songs/{song_id}")
-def delete_song(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).filter(Song.id == song_id).first()
-    if not song:
-        raise HTTPException(404, "Canción no encontrada")
-    if os.path.exists(song.file_path):
-        os.remove(song.file_path)
-    db.delete(song)
-    db.commit()
-    return {"status": "success", "message": "Canción eliminada"}
+    # ---------- descargas ----------
+    @app.post("/downloads/", status_code=202)
+    def start_download(body: DownloadIn, request: Request, db: Session = Depends(get_db)):
+        if not is_youtube_url(body.url):
+            raise HTTPException(400, "Solo se permiten enlaces de videos de YouTube")
+        vid = youtube_id(body.url)
+        existing = db.scalar(select(Song).where(Song.youtube_id == vid))
+        if existing and existing.status == "ok":
+            return {"status": "exists", "song": song_out(existing).model_dump(mode="json")}
+        job = request.app.state.downloader.submit(vid)
+        return {"status": "queued", "job": job.to_dict()}
 
-@app.get("/thumb/{song_id}")
-def get_thumbnail(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).filter(Song.id == song_id).first()
-    if not song:
-        raise HTTPException(404, "Canción no encontrada")
-    youtube_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11})', song.youtube_url)
-    if youtube_id_match:
-        youtube_id = youtube_id_match.group(1)
-        return {"thumbnail_url": f"https://img.youtube.com/vi/{youtube_id}/hqdefault.jpg"}
-    return {"thumbnail_url": None}
+    @app.get("/downloads/")
+    def list_downloads(request: Request):
+        return [j.to_dict() for j in request.app.state.downloader.list()]
 
-@app.get("/stats/")
-def get_stats(db: Session = Depends(get_db)):
-    total_songs = db.query(Song).count()
-    total_size = 0
-    for song in db.query(Song).all():
-        if os.path.exists(song.file_path):
-            total_size += os.path.getsize(song.file_path)
-    return {
-        "total_songs": total_songs,
-        "total_size_mb": round(total_size / (1024 * 1024), 2),
-        "music_path": MUSIC_PATH
-    }
+    @app.get("/downloads/{job_id}")
+    def get_download(job_id: str, request: Request):
+        job = request.app.state.downloader.get(job_id)
+        if not job:
+            raise HTTPException(404, "Descarga no encontrada")
+        return job.to_dict()
+
+    return app
+
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)

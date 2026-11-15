@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import SongCard from "../components/SongCard";
 import { Download, ChevronLeft, ChevronRight } from "lucide-react";
-import axios from "axios";
+import { api } from "../api";
 import toast from "react-hot-toast";
 
 function Library({
@@ -37,7 +37,7 @@ function Library({
                 toast.dismiss(t.id);
 
                 try {
-                  await axios.delete(`http://127.0.0.1:8000/songs/${songId}`);
+                  await api.delete(`/songs/${songId}`);
 
                   toast.success("✅ Canción eliminada", {
                     style: {

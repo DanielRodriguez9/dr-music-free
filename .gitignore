@@ -66,3 +66,16 @@ backend/dist/
 
 # Herramientas
 .claude/
+
+# Binarios de ffmpeg / yt-dlp e instaladores
+ffmpeg*.exe
+ffprobe*.exe
+ffplay*.exe
+yt-dlp*.exe
+backend/bin/
+*.exe
+*.msi
+*.blockmap
+
+# Tests
+.pytest_cache/

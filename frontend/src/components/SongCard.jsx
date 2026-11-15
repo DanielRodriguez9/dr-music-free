@@ -1,6 +1,7 @@
 import React from "react";
 import { CheckCircle, Download, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { audioUrl, artistLabel } from "../api";
 
 function SongCard({
   song,
@@ -15,15 +16,16 @@ function SongCard({
     e.stopPropagation();
 
     try {
-      const audioUrl = `http://127.0.0.1:8000${song.public_url}`;
-      const response = await fetch(audioUrl);
+      const src = audioUrl(song);
+      if (!src) throw new Error("sin archivo");
+      const response = await fetch(src);
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${song.title}.mp3`;
+      a.download = song.filename || `${song.title}.mp3`;
 
       document.body.appendChild(a);
       a.click();
@@ -174,7 +176,8 @@ function SongCard({
       </strong>
 
       <p style={{ color: "#b3b3b3", fontSize: "12px", margin: 0 }}>
-        YouTube Music
+        {artistLabel(song)}
+        {song.status === "missing" && " · ⚠️ falta archivo"}
       </p>
 
       {isActive && (

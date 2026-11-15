@@ -1,4 +1,5 @@
 import React from 'react';
+import { artistLabel } from '../api';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Shuffle, Repeat } from 'lucide-react';
 
 function Player({ 
@@ -44,7 +45,7 @@ function Player({
           }}>
             {currentSong.title.length > 35 ? currentSong.title.substring(0, 32) + "..." : currentSong.title}
           </strong>
-          <p style={{ fontSize: '12px', color: '#b3b3b3', margin: 0 }}>DR Music Free</p>
+          <p style={{ fontSize: '12px', color: '#b3b3b3', margin: 0 }}>{artistLabel(currentSong)}</p>
         </div>
 
         {/* Controles centrales */}
