@@ -14,11 +14,12 @@ export const isPlayable = (song) => Boolean(song?.public_url);
 export const artistLabel = (song) =>
   song?.artist || (song?.source === "local" ? "Archivo local" : "Artista desconocido");
 
-// Miniaturas de YouTube sin franjas negras: hq720 (16:9 HD) y, si no existe, mqdefault.
+// Miniaturas de YouTube, de mejor a peor. hq720/maxres/mq no tienen franjas negras;
+// hqdefault (4:3) es el último recurso. Si ninguna existe, <Cover> muestra una nota musical.
 export function coverUrls(song) {
   const id = song?.youtube_id;
   if (!id) return song?.thumbnail_url ? [song.thumbnail_url] : [];
-  return [`https://i.ytimg.com/vi/${id}/hq720.jpg`, `https://i.ytimg.com/vi/${id}/mqdefault.jpg`];
+  return ["hq720", "maxresdefault", "mqdefault", "hqdefault"].map((f) => `https://i.ytimg.com/vi/${id}/${f}.jpg`);
 }
 
 export const errorMessage = (error) => error?.response?.data?.detail || error?.message || "Error desconocido";

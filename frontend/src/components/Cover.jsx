@@ -9,31 +9,35 @@ function hue(text = "") {
   return h;
 }
 
-/** Carátula cuadrada. Prueba varias URLs y, si fallan, muestra un degradado. */
+// Cuando una miniatura no existe, YouTube responde 404 con una imagen gris de 120x90
+// que el navegador muestra como si fuera válida: se trata como un fallo.
+const isYouTubePlaceholder = (img) => img.naturalWidth === 120 && img.naturalHeight === 90;
+
+/** Carátula cuadrada. Prueba varias miniaturas y, si ninguna existe, muestra una nota musical. */
 export default function Cover({ song, size = "md", className = "", children }) {
   const urls = coverUrls(song);
-  const [failed, setFailed] = useState({ key: null, count: 0 });
+  const [attempt, setAttempt] = useState({ key: null, index: 0, ready: false });
   // si cambia la canción, se reinician los intentos
-  const tries = failed.key === song?.id ? failed.count : 0;
-  const src = urls[tries];
+  const current = attempt.key === song?.id ? attempt : { key: song?.id, index: 0, ready: false };
+  const src = urls[current.index];
+  const next = () => setAttempt({ key: song?.id, index: current.index + 1, ready: false });
 
   return (
-    <div
-      className={`cover cover--${size} ${className}`}
-      style={{ "--cover-hue": hue(song?.title) }}
-    >
-      {src ? (
+    <div className={`cover cover--${size} ${className}`} style={{ "--cover-hue": hue(song?.title) }}>
+      {src && (
         <img
+          key={src}
           src={src}
           alt=""
           loading="lazy"
           decoding="async"
           draggable="false"
-          onError={() => setFailed({ key: song?.id, count: tries + 1 })}
+          className={current.ready ? "is-ready" : ""}
+          onLoad={(e) => (isYouTubePlaceholder(e.currentTarget) ? next() : setAttempt({ ...current, ready: true }))}
+          onError={next}
         />
-      ) : (
-        <Music2 className="cover__icon" aria-hidden="true" />
       )}
+      {!current.ready && <Music2 className="cover__icon" aria-hidden="true" />}
       {children}
     </div>
   );

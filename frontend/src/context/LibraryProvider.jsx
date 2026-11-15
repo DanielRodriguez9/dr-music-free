@@ -7,6 +7,7 @@ export default function LibraryProvider({ children }) {
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [error, setError] = useState(null);
   const [downloads, setDownloads] = useState([]); // trabajos activos o recientes
+  const [playsVersion, setPlaysVersion] = useState(0); // sube cada vez que se guarda una escucha
 
   const fetchSongs = useCallback(
     () =>
@@ -60,7 +61,10 @@ export default function LibraryProvider({ children }) {
     }
     api
       .post("/plays/", body, { headers: { "Content-Type": "text/plain" } })
-      .then(({ data }) => replaceSong(data.song))
+      .then(({ data }) => {
+        replaceSong(data.song);
+        setPlaysVersion((v) => v + 1);
+      })
       .catch(() => {});
   }, []);
 
@@ -115,12 +119,13 @@ export default function LibraryProvider({ children }) {
       deleteSong,
       updateSong,
       recordPlay,
+      playsVersion,
       toggleLike,
       download,
       downloads,
       activeDownloads,
     }),
-    [songs, byId, playable, stats, status, error, fetchSongs, deleteSong, updateSong, recordPlay, toggleLike, download, downloads, activeDownloads],
+    [songs, byId, playable, stats, status, error, fetchSongs, deleteSong, updateSong, recordPlay, playsVersion, toggleLike, download, downloads, activeDownloads],
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;

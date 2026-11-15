@@ -171,3 +171,18 @@ def test_cors_only_allows_configured_origins(client):
     assert ok.headers.get("access-control-allow-origin") == "http://localhost:5174"
     bad = client.get("/", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in bad.headers
+
+
+def test_dates_are_sent_as_utc_with_offset(client, add_song):
+    """El navegador necesita la zona para mostrar la hora local (no UTC)."""
+    from datetime import datetime, timedelta, timezone
+    sid = add_song(duration=100)
+    created = client.get(f"/songs/{sid}").json()["created_at"]
+    assert created.endswith("+00:00") or created.endswith("Z")
+    # una escucha enviada con hora de Colombia (UTC-5) se guarda y devuelve en UTC
+    local = datetime(2026, 11, 15, 15, 47, tzinfo=timezone(timedelta(hours=-5)))
+    client.post("/plays/", json={"song_id": sid, "started_at": local.isoformat(),
+                                 "listened_seconds": 40, "end_reason": "ended"})
+    play = client.get("/plays/").json()[0]
+    assert datetime.fromisoformat(play["started_at"]) == local
+    assert play["started_at"].startswith("2026-11-15T20:47:00")

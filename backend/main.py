@@ -4,7 +4,7 @@
 
 from contextlib import asynccontextmanager
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -201,7 +201,7 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
             if song.duration:
                 listened = min(listened, song.duration + 5)
             counted = counts_as_play(listened, song.duration)
-            started = body.started_at if body.started_at.tzinfo else body.started_at.replace(tzinfo=utcnow().tzinfo)
+            started = body.started_at if body.started_at.tzinfo else body.started_at.replace(tzinfo=timezone.utc)
             play = Play(
                 song_id=song.id, song_title=song.title, song_artist=song.artist,
                 started_at=started, ended_at=utcnow(), listened_seconds=round(listened, 1),

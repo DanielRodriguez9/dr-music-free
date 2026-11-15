@@ -3,12 +3,33 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import (Boolean, DateTime, Float, ForeignKey, Integer, String,
-                        Text, create_engine, event)
+                        Text, TypeDecorator, create_engine, event)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class UTCDateTime(TypeDecorator):
+    """Fecha y hora siempre en UTC.
+
+    SQLite no guarda la zona horaria: se almacena en UTC sin zona y al leer se
+    marca como UTC, para que la API envíe "...+00:00" y el navegador la muestre
+    en la hora local del equipo.
+    """
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:  # sin zona: se asume que ya es UTC
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    def process_result_value(self, value, dialect):
+        return value.replace(tzinfo=timezone.utc) if value is not None else None
 
 
 class Base(DeclarativeBase):
@@ -33,8 +54,8 @@ class Song(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_played_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     legacy_id: Mapped[int | None] = mapped_column(Integer)  # id original en Postgres
 
 
@@ -47,8 +68,8 @@ class Play(Base):
     song_id: Mapped[int | None] = mapped_column(ForeignKey("songs.id", ondelete="SET NULL"), index=True)
     song_title: Mapped[str | None] = mapped_column(String)
     song_artist: Mapped[str | None] = mapped_column(String)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    ended_at: Mapped[datetime] = mapped_column(UTCDateTime)
     listened_seconds: Mapped[float] = mapped_column(Float)
     song_duration: Mapped[float | None] = mapped_column(Float)
     end_reason: Mapped[str] = mapped_column(String)  # ended | skipped | closed

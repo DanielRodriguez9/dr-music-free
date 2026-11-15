@@ -1,4 +1,4 @@
-import { History as HistoryIcon, RotateCw } from "lucide-react";
+import { History as HistoryIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, artistLabel, errorMessage } from "../api";
 import Cover from "../components/Cover";
@@ -19,8 +19,30 @@ function dayLabel(date) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Una sola etiqueta: "Contó" si pasó el mínimo; si no, por qué terminó. */
+function PlayBadge({ play }) {
+  if (play.counted) {
+    return (
+      <span className="badge badge--accent" title="Se oyó al menos la mitad o 30 segundos">
+        Contó
+      </span>
+    );
+  }
+  const [label, title] =
+    play.end_reason === "skipped"
+      ? ["Saltada", "Se pasó a otra canción antes del mínimo"]
+      : play.end_reason === "closed"
+        ? ["App cerrada", "Se cerró la app antes del mínimo"]
+        : ["No contó", "Menos de la mitad y de 30 segundos"];
+  return (
+    <span className="badge badge--muted" title={title}>
+      {label}
+    </span>
+  );
+}
+
 export default function History() {
-  const { byId } = useLibrary();
+  const { byId, playsVersion } = useLibrary();
   const { openMenu } = useUI();
   const { playFrom } = useSongActions();
   const [plays, setPlays] = useState(null);
@@ -38,9 +60,10 @@ export default function History() {
     [],
   );
 
+  // se recarga al abrir y cada vez que termina o se salta una canción
   useEffect(() => {
     fetchPlays();
-  }, [fetchPlays]);
+  }, [fetchPlays, playsVersion]);
 
   const groups = useMemo(() => {
     const out = [];
@@ -58,7 +81,7 @@ export default function History() {
     return {
       total: list.length,
       counted: list.filter((p) => p.counted).length,
-      skipped: list.filter((p) => p.skipped).length,
+      skipped: list.filter((p) => p.skipped && !p.counted).length, // igual que las etiquetas
       seconds: list.reduce((acc, p) => acc + p.listened_seconds, 0),
     };
   }, [plays]);
@@ -77,9 +100,6 @@ export default function History() {
             {plural(summary.skipped, "saltada", "saltadas")} · {formatTotal(summary.seconds)} escuchado
           </p>
         </div>
-        <button type="button" className="btn btn--ghost hero__action" onClick={fetchPlays}>
-          <RotateCw size={16} /> Actualizar
-        </button>
       </header>
 
       {error && <p className="empty">No se pudo cargar el historial: {error}</p>}
@@ -116,17 +136,7 @@ export default function History() {
                     {p.song_duration ? <span className="muted"> / {formatTime(p.song_duration)}</span> : null}
                   </span>
                   <span className="history__badges">
-                    {p.skipped && <span className="badge badge--muted">Saltada</span>}
-                    {p.end_reason === "closed" && <span className="badge badge--muted">App cerrada</span>}
-                    {p.counted ? (
-                      <span className="badge badge--accent" title="Contó como reproducción">
-                        Contó
-                      </span>
-                    ) : (
-                      <span className="badge badge--muted" title="Menos de la mitad y de 30 s">
-                        No contó
-                      </span>
-                    )}
+                    <PlayBadge play={p} />
                   </span>
                 </li>
               );
