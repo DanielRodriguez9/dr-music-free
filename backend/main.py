@@ -75,7 +75,8 @@ def download_song(url: str, db: Session = Depends(get_db)):
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
-        'ffmpeg_location': r'C:\ffmpeg\ffmpeg-8.1.1-essentials_build\bin',
+        # Si FFMPEG_PATH no está en .env, yt-dlp busca ffmpeg en el PATH
+        **({'ffmpeg_location': os.getenv("FFMPEG_PATH")} if os.getenv("FFMPEG_PATH") else {}),
         
         # Configuración robusta para evitar 403
         'headers': {

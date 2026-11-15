@@ -38,3 +38,31 @@ Thumbs.db
 # Música descargada
 backend/music/
 music/
+
+# Audio / video y descargas incompletas
+*.mp3
+*.m4a
+*.webm
+*.opus
+*.flac
+*.wav
+*.part
+*.ytdl
+
+# Cookies y secretos
+cookies*.txt
+*.pem
+
+# Bases de datos locales
+*.sqlite3
+*.db-journal
+
+# Builds de escritorio (Electron / PyInstaller)
+release/
+dist-electron/
+backend/build/
+backend/dist/
+*.spec
+
+# Herramientas
+.claude/

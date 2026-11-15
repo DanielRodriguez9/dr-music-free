@@ -3,7 +3,7 @@ import os
 
 def descargar_musica(url):
     # Ruta donde se guardan las canciones
-    output_folder = r'C:\Users\DanCode\Documents\mytube_music'
+    output_folder = os.getenv("MUSIC_PATH", "./music")
     
     # Creamos la carpeta si no existe
     if not os.path.exists(output_folder):
