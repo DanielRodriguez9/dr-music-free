@@ -91,3 +91,25 @@ def safe_file(music_dir: Path, filename: str | None) -> Path | None:
     except ValueError:
         return None
     return path if path.is_file() else None
+
+
+def sync_file_status(session_factory, music_dir: Path) -> dict:
+    """Marca cada canción como "ok" o "missing" según exista su archivo en la carpeta de música.
+
+    Se ejecuta al arrancar: si se cambia la carpeta, las canciones cuyo archivo no esté
+    aparecen como "Falta archivo" (y vuelven a "ok" si el archivo aparece). No toca archivos.
+    """
+    from sqlalchemy import select
+
+    from db import Song
+
+    changed = {"ok": 0, "missing": 0}
+    with session_factory() as db:
+        for song in db.scalars(select(Song)):
+            exists = safe_file(music_dir, song.filename) is not None
+            status = "ok" if exists else "missing"
+            if song.status != status:
+                song.status = status
+                changed[status] += 1
+        db.commit()
+    return changed

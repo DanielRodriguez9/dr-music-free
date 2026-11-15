@@ -1,7 +1,10 @@
 import axios from "axios";
 
-// Dirección del backend. En la app de escritorio se podrá inyectar con VITE_API_URL.
-export const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+// Puente con la app de escritorio (Electron). En el navegador es null.
+export const desktop = typeof window !== "undefined" && window.drmusic?.isDesktop ? window.drmusic : null;
+
+// Dirección del backend: en la app de escritorio la da Electron (puerto libre en cada arranque).
+export const API_BASE = desktop?.apiBase || import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 export const api = axios.create({ baseURL: API_BASE });
 

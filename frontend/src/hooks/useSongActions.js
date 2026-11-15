@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import toast from "react-hot-toast";
 import { audioUrl, errorMessage, isPlayable } from "../api";
 import { useLibrary, usePlayer, useUI } from "../context/hooks";
+import { downloadErrorToast } from "../lib/ytdlp";
 
 /** Acciones comunes sobre una canción (filas, tarjetas, menú contextual, reproductor). */
 export default function useSongActions() {
@@ -84,7 +85,7 @@ export default function useSongActions() {
       library
         .download(song.youtube_url)
         .then(() => toast.success("Canción recuperada", { id: t }))
-        .catch((err) => toast.error(`Error: ${errorMessage(err)}`, { id: t }));
+        .catch((err) => downloadErrorToast(err, t));
     },
     [library],
   );

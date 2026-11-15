@@ -2,3 +2,5 @@
 pytest==9.2.0
 httpx==0.28.1
 pg8000==1.31.5  # solo para migrate_from_postgres.py
+pillow==11.3.0  # solo para generar el icono (desktop/scripts/make_icon.py)
+pyinstaller==6.22.3  # empaquetar el backend para la app de escritorio

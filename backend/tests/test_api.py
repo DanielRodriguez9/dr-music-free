@@ -186,3 +186,16 @@ def test_dates_are_sent_as_utc_with_offset(client, add_song):
     play = client.get("/plays/").json()[0]
     assert datetime.fromisoformat(play["started_at"]) == local
     assert play["started_at"].startswith("2026-11-15T20:47:00")
+
+
+def test_startup_syncs_file_status(cfg, add_song, app):
+    """Al cambiar de carpeta, lo que no está se ve como "Falta archivo"; si vuelve, se recupera."""
+    from library import sync_file_status
+    present = add_song(filename="esta.mp3")
+    gone = add_song(filename="no-esta.mp3", content=None)
+    assert sync_file_status(app.state.sessions, cfg.music_dir) == {"ok": 0, "missing": 1}
+    (cfg.music_dir / "no-esta.mp3").write_bytes(b"x")
+    assert sync_file_status(app.state.sessions, cfg.music_dir) == {"ok": 1, "missing": 0}
+    with app.state.sessions() as db:
+        from db import Song
+        assert db.get(Song, present).status == "ok" and db.get(Song, gone).status == "ok"

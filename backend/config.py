@@ -6,6 +6,10 @@ Todo se puede sobreescribir con variables de entorno (o backend/.env):
   DB_PATH      archivo SQLite (por defecto DATA_DIR/library.sqlite3)
   FFMPEG_PATH  carpeta bin de ffmpeg (si no, se busca en el PATH)
   CORS_ORIGINS orígenes permitidos separados por comas
+  YTDLP_BUNDLED   yt-dlp.exe incluido en la app (solo app instalada)
+  YTDLP_PATH      copia actualizable de yt-dlp.exe (por defecto DATA_DIR/bin/yt-dlp.exe)
+  YTDLP_JS_RUNTIME motor JavaScript para YouTube, p. ej. "node:C:/ruta/DR Music Free.exe"
+  YTDLP_RUN_AS_NODE=1  el motor es el ejecutable de Electron funcionando como Node
 """
 import os
 from pathlib import Path
@@ -38,6 +42,12 @@ class Settings:
             "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
         )
         self.cors_origins = [o.strip() for o in origins.split(",") if o.strip()]
+        bundled = os.getenv("YTDLP_BUNDLED")
+        self.ytdlp_bundled = Path(bundled) if bundled else None
+        ytdlp = os.getenv("YTDLP_PATH")
+        self.ytdlp_path = Path(ytdlp) if ytdlp else (self.data_dir / "bin" / "yt-dlp.exe" if bundled else None)
+        self.ytdlp_js_runtime = os.getenv("YTDLP_JS_RUNTIME") or None
+        self.ytdlp_env = {"ELECTRON_RUN_AS_NODE": "1"} if os.getenv("YTDLP_RUN_AS_NODE") == "1" else {}
 
     def ensure_dirs(self) -> None:
         self.music_dir.mkdir(parents=True, exist_ok=True)

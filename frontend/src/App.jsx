@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
+import { desktop } from "./api";
 import ContextMenu from "./components/ContextMenu";
 import Dialogs from "./components/Dialogs";
 import PlayerBar from "./components/PlayerBar";
@@ -7,11 +9,13 @@ import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import LibraryProvider from "./context/LibraryProvider";
 import UIProvider from "./context/UIProvider";
-import { useLibrary, useUI } from "./context/hooks";
+import { useLibrary, usePlayer, useUI } from "./context/hooks";
 import useShortcuts from "./hooks/useShortcuts";
+import useStableHandlers from "./hooks/useStableHandlers";
 import useSongActions from "./hooks/useSongActions";
 import Collection from "./pages/Collection";
 import History from "./pages/History";
+import Settings from "./pages/Settings";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
 import PlayerProvider from "./player/PlayerProvider";
@@ -20,6 +24,27 @@ import PlayerProvider from "./player/PlayerProvider";
 function Shortcuts() {
   const { toggleLike } = useSongActions();
   useShortcuts({ onToggleLike: toggleLike });
+  return null;
+}
+
+/** App de escritorio: órdenes de la bandeja del sistema y estado para su menú. */
+function DesktopBridge() {
+  const player = usePlayer();
+  const { current, isPlaying } = player;
+  const h = useStableHandlers({
+    command: (cmd) => {
+      if (cmd === "toggle") player.togglePlay();
+      else if (cmd === "next") player.next();
+      else if (cmd === "prev") player.prev();
+    },
+  });
+
+  useEffect(() => desktop.onPlayerCommand(h.command), [h]);
+
+  useEffect(() => {
+    desktop.sendPlayerState({ title: current?.title ?? null, artist: current?.artist ?? null, isPlaying });
+  }, [current?.title, current?.artist, isPlaying]);
+
   return null;
 }
 
@@ -67,6 +92,8 @@ function Content() {
       );
     case "history":
       return <History />;
+    case "settings":
+      return <Settings />;
     default:
       return <Home />;
   }
@@ -86,6 +113,7 @@ function Layout() {
       <ContextMenu />
       <Dialogs />
       <Shortcuts />
+      {desktop && <DesktopBridge />}
       <Toaster
         position="bottom-center"
         containerStyle={{ bottom: "calc(var(--player-h) + 16px)" }}

@@ -1,7 +1,7 @@
 import { CircleAlert, ClipboardPaste, Download, LoaderCircle, Music2 } from "lucide-react";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { errorMessage } from "../api";
+import { downloadErrorToast, updateYtdlp } from "../lib/ytdlp";
 import { useLibrary, usePlayer, useUI } from "../context/hooks";
 import { SHORTCUTS } from "../hooks/useShortcuts";
 import Modal from "./Modal";
@@ -56,7 +56,7 @@ function DownloadDialog({ onClose }) {
         );
       }
     } catch (err) {
-      toast.error(`No se pudo descargar: ${errorMessage(err)}`, { duration: 8000 });
+      downloadErrorToast(err);
     }
   };
 
@@ -121,6 +121,11 @@ function DownloadDialog({ onClose }) {
                 </span>
                 {["queued", "downloading", "processing"].includes(job.status) && (
                   <span className="job__bar" style={{ "--pct": `${job.progress}%` }} />
+                )}
+                {job.error_kind === "outdated" && (
+                  <button type="button" className="btn btn--small job__action" onClick={updateYtdlp}>
+                    Actualizar yt-dlp
+                  </button>
                 )}
               </span>
             </li>

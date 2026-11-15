@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { load, save } from "../lib/storage";
 import { UIContext } from "./contexts";
 
-const VIEWS = ["home", "search", "library", "liked", "history"];
+const VIEWS = ["home", "search", "library", "liked", "history", "settings"];
 
 export default function UIProvider({ children }) {
   const [view, setView] = useState(() => {

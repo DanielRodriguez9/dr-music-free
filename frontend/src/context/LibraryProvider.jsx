@@ -95,7 +95,11 @@ export default function LibraryProvider({ children }) {
       if (data.status === "exists") return { status: "exists", song: data.song };
       patchJob(data.job);
       const job = await waitForDownload(data.job.id, patchJob);
-      if (job.status === "error") throw new Error(job.error);
+      if (job.status === "error") {
+        const err = new Error(job.error);
+        err.kind = job.error_kind; // "outdated" -> sugerir actualizar yt-dlp
+        throw err;
+      }
       const list = await fetchSongs();
       return { status: "done", job, song: list.find((s) => s.id === job.song_id) };
     },

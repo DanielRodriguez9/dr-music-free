@@ -79,3 +79,7 @@ backend/bin/
 
 # Tests
 .pytest_cache/
+
+# App de escritorio: binarios descargados/copiados al compilar
+desktop/vendor/
+desktop/node_modules/

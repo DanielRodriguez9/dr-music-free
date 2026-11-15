@@ -1,0 +1,18 @@
+{
+  "name": "dr-music-free",
+  "productName": "DR Music Free",
+  "version": "2.0.0",
+  "description": "DR Music Free - reproductor de música personal",
+  "author": "Daniel Rodríguez",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build.mjs",
+    "build:installer": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  }
+}

@@ -1,0 +1,42 @@
+# Configuración del instalador de DR Music Free (Windows, NSIS)
+appId: com.drmusic.free
+productName: DR Music Free
+copyright: Daniel Rodríguez
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+
+asar: true
+
+# Fuera del .asar: servidor, interfaz y binarios
+extraResources:
+  - from: ../backend/dist/drmusic-backend
+    to: backend
+  - from: ../frontend/dist
+    to: frontend
+  - from: vendor/bin
+    to: bin
+
+win:
+  target: nsis
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: DR Music Free
+  runAfterFinish: true
+  # Desinstalar NO borra los datos (%APPDATA%\DR Music Free) ni la música
+  deleteAppDataOnUninstall: false
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  language: "3082"
+  artifactName: DR-Music-Free-Setup-${version}.${ext}

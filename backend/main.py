@@ -4,6 +4,7 @@
 
 from contextlib import asynccontextmanager
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -15,8 +16,9 @@ from sqlalchemy.orm import Session
 
 from config import Settings, settings as default_settings
 from db import Play, Song, counts_as_play, init_db, make_engine, make_session_factory, utcnow
+import ytdlp_tool
 from downloader import Downloader
-from library import is_youtube_url, safe_file, youtube_id
+from library import is_youtube_url, safe_file, sync_file_status, youtube_id
 
 VERSION = "2.0.0"
 
@@ -94,16 +96,26 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
     engine = make_engine(cfg.db_path)
     init_db(engine)
     sessions = make_session_factory(engine)
+    sync_file_status(sessions, cfg.music_dir)
+
+    # yt-dlp.exe actualizable (app instalada) o librería de Python (desarrollo)
+    ytdlp_exe = ytdlp_tool.prepare(cfg.ytdlp_bundled, cfg.ytdlp_path) if cfg.ytdlp_path else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
+        app.state.downloader.shutdown()
         engine.dispose()
 
     app = FastAPI(title="DR Music Free API", version=VERSION, lifespan=lifespan)
     app.state.settings = cfg
     app.state.sessions = sessions
-    app.state.downloader = downloader or Downloader(sessions, cfg.music_dir, cfg.ffmpeg_path)
+    app.state.ytdlp_exe = ytdlp_exe
+    app.state.downloader = downloader or Downloader(
+        sessions, cfg.music_dir, cfg.ffmpeg_path,
+        exe_cmd=[str(ytdlp_exe)] if ytdlp_exe else None,
+        js_runtime=cfg.ytdlp_js_runtime, exe_env=cfg.ytdlp_env,
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -111,6 +123,15 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["*"],
     )
+
+    # Se registra después de CORS para envolverlo y llegar también a las consultas previas
+    @app.middleware("http")
+    async def private_network_access(request: Request, call_next):
+        # Chromium pide permiso explícito para que una página llame a 127.0.0.1
+        response = await call_next(request)
+        if request.headers.get("access-control-request-private-network"):
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
 
     def get_db(request: Request):
         with request.app.state.sessions() as db:
@@ -226,6 +247,29 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
             q = q.where(Play.counted.is_(True))
         return db.scalars(q).all()
 
+    # ---------- sistema (Ajustes) ----------
+    @app.get("/system/info")
+    def system_info(request: Request):
+        exe = request.app.state.ytdlp_exe
+        ffmpeg_dir = cfg.ffmpeg_path
+        return {
+            "version": VERSION,
+            "music_path": str(cfg.music_dir),
+            "data_path": str(cfg.data_dir),
+            "db_path": str(cfg.db_path),
+            "ytdlp_version": ytdlp_tool.version(exe, fast=True),
+            "ytdlp_mode": "exe" if exe else "module",
+            "ytdlp_updatable": exe is not None,
+            "ffmpeg_path": ffmpeg_dir or "PATH del sistema",
+        }
+
+    @app.post("/system/ytdlp/update")
+    def update_ytdlp(request: Request):
+        busy = [j for j in request.app.state.downloader.list() if j.status in ("queued", "downloading", "processing")]
+        if busy:
+            raise HTTPException(409, "Espera a que terminen las descargas en curso para actualizar yt-dlp")
+        return ytdlp_tool.update(request.app.state.ytdlp_exe)
+
     # ---------- descargas ----------
     @app.post("/downloads/", status_code=202)
     def start_download(body: DownloadIn, request: Request, db: Session = Depends(get_db)):
@@ -252,10 +296,51 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
     return app
 
 
+def _watch_parent(pid: int) -> None:
+    """Si la app de escritorio se cierra de golpe, el servidor se apaga solo."""
+    import threading
+    import time
+
+    def alive(p: int) -> bool:
+        if os.name == "nt":
+            import ctypes
+            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, p)  # QUERY_LIMITED_INFORMATION
+            if not handle:
+                return False
+            code = ctypes.c_ulong()
+            ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return code.value == 259  # STILL_ACTIVE
+        try:
+            os.kill(p, 0)
+            return True
+        except OSError:
+            return False
+
+    def loop() -> None:
+        while alive(pid):
+            time.sleep(2)
+        try:
+            app.state.downloader.shutdown()
+        finally:
+            os._exit(0)
+
+    threading.Thread(target=loop, daemon=True, name="parent-watch").start()
+
+
 app = create_app()
 
 
 if __name__ == "__main__":
+    import argparse
+
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    parser = argparse.ArgumentParser(description="Servidor de DR Music Free")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--parent-pid", type=int, default=None)
+    args = parser.parse_args()
+    if args.parent_pid:
+        _watch_parent(args.parent_pid)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

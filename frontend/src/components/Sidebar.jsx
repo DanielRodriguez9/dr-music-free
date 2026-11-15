@@ -1,4 +1,4 @@
-import { Download, Heart, History, House, Keyboard, Library, Search } from "lucide-react";
+import { Download, Heart, History, House, Keyboard, Library, Search, Settings } from "lucide-react";
 import { useLibrary, useUI } from "../context/hooks";
 import { formatTotal, plural } from "../lib/format";
 
@@ -90,9 +90,18 @@ export default function Sidebar() {
         <p>
           {plural(stats.playable, "canción", "canciones")} · {formatTotal(stats.duration)}
         </p>
-        <button type="button" className="link link--muted" onClick={() => openDialog({ type: "shortcuts" })}>
-          <Keyboard size={14} /> Atajos de teclado
-        </button>
+        <div className="sidebar__links">
+          <button
+            type="button"
+            className={`link link--muted ${view === "settings" ? "is-active" : ""}`}
+            onClick={() => go("settings")}
+          >
+            <Settings size={14} /> Ajustes
+          </button>
+          <button type="button" className="link link--muted" onClick={() => openDialog({ type: "shortcuts" })}>
+            <Keyboard size={14} /> Atajos
+          </button>
+        </div>
       </div>
     </aside>
   );
