@@ -1,76 +1,99 @@
-import React from "react";
-import { Home, Search, Library, Music } from "lucide-react";
+import { Download, Heart, History, House, Keyboard, Library, Search } from "lucide-react";
+import { useLibrary, useUI } from "../context/hooks";
+import { formatTotal, plural } from "../lib/format";
 
-function Sidebar({ activeTab, setActiveTab }) {
-  const navItems = [
-    { id: "home", label: "Inicio", icon: Home },
-    { id: "search", label: "Buscar", icon: Search },
-    { id: "library", label: "Tu Biblioteca", icon: Library },
-  ];
+const NAV = [
+  { id: "home", label: "Inicio", icon: House },
+  { id: "search", label: "Buscar", icon: Search },
+  { id: "library", label: "Tu biblioteca", icon: Library },
+];
+
+export default function Sidebar() {
+  const { view, navigate, openDialog, focusSearch } = useUI();
+  const { songs, stats, activeDownloads } = useLibrary();
+  const likedCount = songs.filter((s) => s.liked).length;
+  const downloading = activeDownloads[0];
+
+  const go = (id) => {
+    navigate(id);
+    if (id === "search") requestAnimationFrame(focusSearch);
+  };
 
   return (
     <aside className="sidebar">
-      <div className="logo-container">
-        <Music size={28} color="#0ea5e9" />
-        <h2 className="logo">
-          DR Music <span className="logo-free">Free</span>
-        </h2>
+      <div className="brand">
+        <span className="brand__logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22">
+            <path d="M9 18V6l11-2v12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="6" cy="18" r="3" fill="currentColor" />
+            <circle cx="17" cy="16" r="3" fill="currentColor" />
+          </svg>
+        </span>
+        <span className="brand__name">DR Music</span>
       </div>
-      <p className="logo-slogan">Música gratis · Sin anuncios</p>
 
-      <nav>
-        <ul style={{ listStyle: "none", padding: 0, marginTop: "32px" }}>
-          {navItems.map((item) => (
-            <li
-              key={item.id}
-              className={`nav-item ${activeTab === item.id ? "active" : ""}`}
-              onClick={() => setActiveTab(item.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "16px",
-                marginBottom: "8px",
-                padding: "12px 16px",
-                borderRadius: "8px",
-                cursor: "pointer",
-                color:
-                  activeTab === item.id
-                    ? "var(--text-main)"
-                    : "var(--text-dim)",
-                backgroundColor:
-                  activeTab === item.id ? "#282828" : "transparent",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== item.id) {
-                  e.currentTarget.style.backgroundColor = "#1f1f1f";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== item.id) {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }
-              }}
-            >
-              <item.icon size={22} />
-              <span
-                style={{ fontWeight: activeTab === item.id ? "600" : "400" }}
-              >
-                {item.label}
-              </span>
-            </li>
-          ))}
-        </ul>
+      <nav className="nav" aria-label="Principal">
+        {NAV.map(({ id, label, icon: Icon }) => (
+          <button key={id} type="button" className={`nav__item ${view === id ? "is-active" : ""}`} onClick={() => go(id)}>
+            <Icon size={20} />
+            <span>{label}</span>
+          </button>
+        ))}
       </nav>
 
-      {/* Footer del sidebar */}
-      {/* Footer del sidebar */}
-      <div className="sidebar-footer">
-        <p>DR Music Free v1.0</p>
-        <p>Creado por Daniel Rodríguez</p>
+      <div className="sidebar__section">
+        <p className="sidebar__label">Tu música</p>
+        <button
+          type="button"
+          className={`nav__item nav__item--collection ${view === "liked" ? "is-active" : ""}`}
+          onClick={() => go("liked")}
+        >
+          <span className="collection-icon collection-icon--liked">
+            <Heart size={16} fill="currentColor" />
+          </span>
+          <span className="nav__text">
+            <span>Tus me gusta</span>
+            <small>{plural(likedCount, "canción", "canciones")}</small>
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`nav__item nav__item--collection ${view === "history" ? "is-active" : ""}`}
+          onClick={() => go("history")}
+        >
+          <span className="collection-icon">
+            <History size={16} />
+          </span>
+          <span className="nav__text">
+            <span>Historial</span>
+            <small>Lo que has escuchado</small>
+          </span>
+        </button>
+      </div>
+
+      <button type="button" className="download-cta" onClick={() => openDialog({ type: "download" })}>
+        <Download size={18} />
+        <span className="download-cta__text">
+          <span>Descargar de YouTube</span>
+          {downloading && (
+            <small>
+              {downloading.status === "processing" ? "Convirtiendo..." : `Descargando ${Math.round(downloading.progress)}%`}
+            </small>
+          )}
+        </span>
+        {downloading && (
+          <span className="download-cta__bar" style={{ "--pct": `${downloading.progress}%` }} aria-hidden="true" />
+        )}
+      </button>
+
+      <div className="sidebar__footer">
+        <p>
+          {plural(stats.playable, "canción", "canciones")} · {formatTotal(stats.duration)}
+        </p>
+        <button type="button" className="link link--muted" onClick={() => openDialog({ type: "shortcuts" })}>
+          <Keyboard size={14} /> Atajos de teclado
+        </button>
       </div>
     </aside>
   );
 }
-
-export default Sidebar;

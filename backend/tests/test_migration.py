@@ -59,4 +59,7 @@ def test_apply_keeps_everything_and_never_touches_files(tmp_path):
     assert {s.status for s in songs if s.youtube_id in ("c" * 11, "e" * 11)} == {"missing"}
     local = songs[-1]
     assert (local.source, local.filename, local.youtube_id) == ("local", "Suelta.webm", None)
+    # las que faltan toman la fecha de una vecina con archivo (no la fecha de la migración)
+    dates = {s.created_at for s in songs if s.status == "ok"}
+    assert all(s.created_at in dates for s in songs if s.status == "missing")
     assert sorted(p.name for p in music.iterdir()) == before

@@ -2,8 +2,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import (Boolean, DateTime, Float, Integer, String, Text,
-                        create_engine, event)
+from sqlalchemy import (Boolean, DateTime, Float, ForeignKey, Integer, String,
+                        Text, create_engine, event)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 
@@ -36,6 +36,32 @@ class Song(Base):
     last_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     legacy_id: Mapped[int | None] = mapped_column(Integer)  # id original en Postgres
+
+
+class Play(Base):
+    """Una escucha. Cuenta como reproducción si se oyó al menos la mitad o 30 s."""
+    __tablename__ = "plays"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Si se borra la canción, el historial se conserva con el título guardado
+    song_id: Mapped[int | None] = mapped_column(ForeignKey("songs.id", ondelete="SET NULL"), index=True)
+    song_title: Mapped[str | None] = mapped_column(String)
+    song_artist: Mapped[str | None] = mapped_column(String)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    listened_seconds: Mapped[float] = mapped_column(Float)
+    song_duration: Mapped[float | None] = mapped_column(Float)
+    end_reason: Mapped[str] = mapped_column(String)  # ended | skipped | closed
+    skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    counted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+
+COUNT_MIN_SECONDS = 30
+
+
+def counts_as_play(listened: float, duration: float | None) -> bool:
+    threshold = COUNT_MIN_SECONDS if not duration else min(COUNT_MIN_SECONDS, duration / 2)
+    return listened >= threshold
 
 
 class LegacyPostgresSong(Base):

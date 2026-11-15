@@ -136,6 +136,14 @@ def apply(rows: list[dict], p: dict, music_dir: Path, db_path: Path) -> None:
             db.add(Song(title=title, artist=artist, original_title=path.stem,
                         filename=path.name, source="local", status="ok",
                         **{k: v for k, v in file_info(path).items() if v is not None}))
+        db.flush()
+
+        # Las canciones sin archivo no tienen fecha propia: toman la de su vecina en Postgres
+        dated = [(s.legacy_id, s.created_at) for s in db.scalars(
+            select(Song).where(Song.status == "ok", Song.legacy_id.is_not(None)))]
+        for song in db.scalars(select(Song).where(Song.status == "missing")):
+            if dated:
+                song.created_at = min(dated, key=lambda d: abs(d[0] - song.legacy_id))[1]
         db.commit()
 
 

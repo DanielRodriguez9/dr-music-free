@@ -51,11 +51,59 @@ def test_patch_song(client, add_song):
     assert client.patch(f"/songs/{sid}", json={"title": "  "}).status_code == 400
 
 
-def test_register_play(client, add_song):
+def post_play(client, song_id, listened, reason="ended"):
+    return client.post("/plays/", json={
+        "song_id": song_id, "started_at": "2026-11-15T20:00:00Z",
+        "listened_seconds": listened, "end_reason": reason,
+    })
+
+
+def test_play_counts_after_30_seconds(client, add_song):
+    sid = add_song(duration=240)
+    r = post_play(client, sid, 29, "skipped").json()
+    assert r["play"]["counted"] is False and r["play"]["skipped"] is True
+    assert r["song"]["play_count"] == 0 and r["song"]["last_played_at"]
+    r = post_play(client, sid, 30, "skipped").json()
+    assert r["play"]["counted"] is True and r["song"]["play_count"] == 1
+
+
+def test_play_counts_after_half_of_short_song(client, add_song):
+    sid = add_song(duration=40)
+    assert post_play(client, sid, 19).json()["play"]["counted"] is False
+    assert post_play(client, sid, 20).json()["play"]["counted"] is True
+
+
+def test_play_accepts_text_plain_beacon(client, add_song):
+    import json as _json
+    sid = add_song(duration=100)
+    body = _json.dumps({"song_id": sid, "started_at": "2026-11-15T20:00:00Z",
+                        "listened_seconds": 60, "end_reason": "closed"})
+    r = client.post("/plays/", content=body, headers={"Content-Type": "text/plain"})
+    assert r.status_code == 201 and r.json()["play"]["end_reason"] == "closed"
+
+
+def test_play_validation(client, add_song):
     sid = add_song()
-    client.post(f"/songs/{sid}/play")
-    r = client.post(f"/songs/{sid}/play").json()
-    assert r["play_count"] == 2 and r["last_played_at"]
+    assert post_play(client, sid, 10, "otro").status_code == 422
+    assert post_play(client, 999, 10).status_code == 404
+    assert client.post("/plays/", content="no json").status_code == 422
+
+
+def test_listened_capped_to_duration(client, add_song):
+    sid = add_song(duration=100)
+    assert post_play(client, sid, 5000).json()["play"]["listened_seconds"] == 105
+
+
+def test_list_plays_and_history_survives_delete(client, add_song):
+    sid = add_song(duration=100, artist="Yo")
+    post_play(client, sid, 10, "skipped")
+    post_play(client, sid, 80)
+    plays = client.get("/plays/").json()
+    assert len(plays) == 2
+    assert len(client.get("/plays/?counted_only=true").json()) == 1
+    client.delete(f"/songs/{sid}")
+    plays = client.get("/plays/").json()
+    assert len(plays) == 2 and plays[0]["song_id"] is None and plays[0]["song_title"] == "Tema"
 
 
 def test_delete_removes_file(client, add_song, cfg):

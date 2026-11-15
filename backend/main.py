@@ -3,17 +3,18 @@
 # Biblioteca local de música + descargas desde YouTube
 
 from contextlib import asynccontextmanager
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config import Settings, settings as default_settings
-from db import Song, init_db, make_engine, make_session_factory, utcnow
+from db import Play, Song, counts_as_play, init_db, make_engine, make_session_factory, utcnow
 from downloader import Downloader
 from library import is_youtube_url, safe_file, youtube_id
 
@@ -50,6 +51,29 @@ class SongPatch(BaseModel):
     artist: str | None = None
     album: str | None = None
     liked: bool | None = None
+
+
+class PlayIn(BaseModel):
+    song_id: int
+    started_at: datetime
+    listened_seconds: float = Field(ge=0, le=24 * 3600)
+    end_reason: str = Field(pattern="^(ended|skipped|closed)$")
+
+
+class PlayOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    song_id: int | None
+    song_title: str | None
+    song_artist: str | None
+    started_at: datetime
+    ended_at: datetime
+    listened_seconds: float
+    song_duration: float | None
+    end_reason: str
+    skipped: bool
+    counted: bool
 
 
 class DownloadIn(BaseModel):
@@ -137,14 +161,6 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         db.commit()
         return song_out(song)
 
-    @app.post("/songs/{song_id}/play", response_model=SongOut)
-    def register_play(song_id: int, db: Session = Depends(get_db)):
-        song = get_song_or_404(song_id, db)
-        song.play_count += 1
-        song.last_played_at = utcnow()
-        db.commit()
-        return song_out(song)
-
     @app.get("/songs/{song_id}/audio")
     def song_audio(song_id: int, db: Session = Depends(get_db)):
         song = get_song_or_404(song_id, db)
@@ -169,6 +185,46 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
     @app.get("/thumb/{song_id}")
     def get_thumbnail(song_id: int, db: Session = Depends(get_db)):
         return {"thumbnail_url": get_song_or_404(song_id, db).thumbnail_url}
+
+    # ---------- historial de reproducción ----------
+    @app.post("/plays/", status_code=201)
+    async def record_play(request: Request):
+        # Se lee el cuerpo a mano: al cerrar la app llega por sendBeacon como text/plain
+        try:
+            body = PlayIn.model_validate(json.loads(await request.body() or b"{}"))
+        except (ValueError, ValidationError) as exc:
+            raise HTTPException(422, f"Datos de reproducción no válidos: {exc}") from exc
+
+        with request.app.state.sessions() as db:
+            song = get_song_or_404(body.song_id, db)
+            listened = body.listened_seconds
+            if song.duration:
+                listened = min(listened, song.duration + 5)
+            counted = counts_as_play(listened, song.duration)
+            started = body.started_at if body.started_at.tzinfo else body.started_at.replace(tzinfo=utcnow().tzinfo)
+            play = Play(
+                song_id=song.id, song_title=song.title, song_artist=song.artist,
+                started_at=started, ended_at=utcnow(), listened_seconds=round(listened, 1),
+                song_duration=song.duration, end_reason=body.end_reason,
+                skipped=body.end_reason == "skipped", counted=counted,
+            )
+            db.add(play)
+            song.last_played_at = play.ended_at
+            if counted:
+                song.play_count += 1
+            db.commit()
+            return {"play": PlayOut.model_validate(play).model_dump(mode="json"),
+                    "song": song_out(song).model_dump(mode="json")}
+
+    @app.get("/plays/", response_model=list[PlayOut])
+    def list_plays(limit: int = 200, days: int | None = None, counted_only: bool = False,
+                   db: Session = Depends(get_db)):
+        q = select(Play).order_by(Play.started_at.desc()).limit(min(max(limit, 1), 5000))
+        if days:
+            q = q.where(Play.started_at >= utcnow() - timedelta(days=days))
+        if counted_only:
+            q = q.where(Play.counted.is_(True))
+        return db.scalars(q).all()
 
     # ---------- descargas ----------
     @app.post("/downloads/", status_code=202)
