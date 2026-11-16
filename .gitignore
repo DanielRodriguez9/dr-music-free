@@ -66,6 +66,8 @@ backend/dist/
 
 # Herramientas
 .claude/
+CLAUDE.md
+CLAUDE.local.md
 
 # Binarios de ffmpeg / yt-dlp e instaladores
 ffmpeg*.exe
