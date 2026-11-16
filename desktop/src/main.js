@@ -218,13 +218,19 @@ function run() {
 
   // ---------- comunicación con la interfaz ----------
   ipcMain.on("get-config", (e) => {
-    e.returnValue = { apiBase: `http://127.0.0.1:${backend.port}`, version: app.getVersion(), isPackaged: app.isPackaged };
+    e.returnValue = {
+      apiBase: `http://127.0.0.1:${backend.port}`,
+      version: app.getVersion(),
+      isPackaged: app.isPackaged,
+      userName: settings.get("userName") || "",
+    };
   });
 
   ipcMain.handle("settings:get", () => ({
     musicDir: settings.get("musicDir"),
     closeToTray: settings.get("closeToTray"),
     openAtLogin: settings.get("openAtLogin"),
+    userName: settings.get("userName") || "",
     dataDir: DATA_DIR,
     logDir: path.join(DATA_DIR, "logs"),
     version: app.getVersion(),
@@ -235,6 +241,8 @@ function run() {
     if (key === "closeToTray") {
       settings.set("closeToTray", Boolean(value));
       setTrayEnabled(Boolean(value));
+    } else if (key === "userName") {
+      settings.set("userName", String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 40));
     } else if (key === "openAtLogin") {
       settings.set("openAtLogin", Boolean(value));
       applyOpenAtLogin(Boolean(value));
@@ -251,6 +259,18 @@ function run() {
     await backend.restart(dir);
     win?.webContents.reload(); // mismo origen: la sesión guardada se conserva
     return dir;
+  });
+
+  // importar una carpeta de música: solo devuelve la ruta elegida (el servidor la lee)
+  ipcMain.handle("dialog:choose-folder", async () => {
+    const parent = win && !win.isDestroyed() ? win : undefined;
+    const res = await dialog.showOpenDialog(parent, {
+      title: "Elige una carpeta con música para importar",
+      defaultPath: app.getPath("music"),
+      properties: ["openDirectory"],
+      buttonLabel: "Importar esta carpeta",
+    });
+    return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
   });
 
   ipcMain.handle("open-path", (_e, which) => {

@@ -5,3 +5,4 @@ python-dotenv==1.2.2
 yt-dlp==2026.8.19
 yt-dlp-ejs==0.8.0
 mutagen==1.48.1
+pillow==11.3.0

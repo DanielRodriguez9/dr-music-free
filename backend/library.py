@@ -1,5 +1,6 @@
 """Utilidades de biblioteca: enlaces de YouTube, metadatos y escaneo de archivos."""
 import re
+import unicodedata
 from pathlib import Path
 
 AUDIO_EXTS = {".mp3", ".m4a", ".webm", ".opus", ".ogg", ".flac", ".wav", ".aac"}
@@ -36,10 +37,46 @@ def thumbnail_for(video_id: str | None) -> str | None:
     return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
 
+def normalize(text: str | None) -> str:
+    """Minúsculas, sin tildes ni signos: para comparar nombres."""
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch)).lower()
+    return re.sub(r"[^0-9a-z]+", " ", text).strip()
+
+
+_CHANNEL_SUFFIX = re.compile(r"\s*(?:-\s*topic|vevo|tv|official|oficial|music|musica|música|channel|records?)\s*$", re.I)
+
+
+def clean_channel(channel: str | None) -> tuple[str | None, bool]:
+    """("De La Ghetto - Topic") -> ("De La Ghetto", True). El bool indica canal automático
+    de artista ("- Topic") o VEVO, que son del propio artista."""
+    if not channel:
+        return None, False
+    name = channel.strip()
+    auto = bool(re.search(r"(-\s*topic|vevo)\s*$", name, re.I))
+    for _ in range(2):
+        name = _CHANNEL_SUFFIX.sub("", name).strip(" -")
+    return (name or None), auto
+
+
+_ARTIST_SPLIT = re.compile(r"\s*(?:,|;|\s/\s|\s+(?:feat\.?|ft\.?|featuring|x|vs\.?)\s+)\s*", re.I)
+
+
+def split_artists(artist: str | None) -> list[str]:
+    """"Feid, El Americano 4KT" -> ["Feid", "El Americano 4KT"]; "2Pac ft. Bob Marley" -> ["2Pac", "Bob Marley"].
+    No separa "&" ni "y" (romperían nombres como "Simon & Garfunkel")."""
+    if not artist:
+        return []
+    parts = [p.strip(" -") for p in _ARTIST_SPLIT.split(artist)]
+    return [p for p in parts if p]
+
+
 def parse_title(raw: str, uploader: str | None = None) -> tuple[str | None, str]:
     """Devuelve (artista, título) a partir de un título de YouTube.
 
     "Arctic Monkeys - Do I Wanna Know? (Official Video)" -> ("Arctic Monkeys", "Do I Wanna Know?")
+    Si el canal coincide con la parte derecha ("La Rebelión - Joe Arroyo" en el canal de
+    Joe Arroyo), se entiende que el orden está invertido.
     """
     text = raw.strip()
     # Lo que va después de " | " suele ser el nombre del álbum o canal
@@ -53,10 +90,13 @@ def parse_title(raw: str, uploader: str | None = None) -> tuple[str | None, str]
             left, right = text.split(sep, 1)
             if left.strip() and right.strip():
                 artist, text = left.strip(), right.strip()
+                channel, _ = clean_channel(uploader)
+                if channel and normalize(channel) == normalize(text) and normalize(channel) != normalize(artist):
+                    artist, text = text, artist  # "Canción - Artista"
             break
 
     if artist is None and uploader:
-        artist = re.sub(r"\s*-\s*Topic$", "", uploader).strip() or None
+        artist = clean_channel(uploader)[0] or uploader.strip() or None
 
     title = text.strip(" -–—") or raw.strip()
     return artist, title
@@ -69,6 +109,37 @@ def audio_duration(path: Path) -> float | None:
         return round(float(f.info.length), 2) if f and f.info else None
     except Exception:
         return None
+
+
+def read_tags(path: Path) -> dict:
+    """Etiquetas de un archivo de audio (título, artista, álbum, género, pista, duración)."""
+    out: dict = {}
+    try:
+        import mutagen
+        f = mutagen.File(path, easy=True)
+    except Exception:
+        return out
+    if not f:
+        return out
+
+    def first(*keys):
+        for k in keys:
+            v = f.get(k) if hasattr(f, "get") else None
+            if v:
+                return str(v[0]).strip() or None
+        return None
+
+    out["title"] = first("title")
+    out["artist"] = first("artist", "albumartist", "performer")
+    out["album"] = first("album")
+    out["genre"] = first("genre")
+    track = first("tracknumber")
+    if track:
+        m = re.match(r"\d+", track)
+        out["track_no"] = int(m.group()) if m else None
+    if f.info and getattr(f.info, "length", None):
+        out["duration"] = round(float(f.info.length), 2)
+    return {k: v for k, v in out.items() if v}
 
 
 def list_audio_files(music_dir: Path) -> list[Path]:
@@ -93,6 +164,12 @@ def safe_file(music_dir: Path, filename: str | None) -> Path | None:
     return path if path.is_file() else None
 
 
+def song_file(song, music_dir: Path, folders: dict[int, Path]) -> Path | None:
+    """Archivo de una canción: en su carpeta importada o en la carpeta de música."""
+    base = folders.get(song.folder_id) if song.folder_id else music_dir
+    return safe_file(base, song.filename) if base else None
+
+
 def sync_file_status(session_factory, music_dir: Path) -> dict:
     """Marca cada canción como "ok" o "missing" según exista su archivo en la carpeta de música.
 
@@ -101,12 +178,13 @@ def sync_file_status(session_factory, music_dir: Path) -> dict:
     """
     from sqlalchemy import select
 
-    from db import Song
+    from db import Folder, Song
 
     changed = {"ok": 0, "missing": 0}
     with session_factory() as db:
+        folders = {f.id: Path(f.path) for f in db.scalars(select(Folder))}
         for song in db.scalars(select(Song)):
-            exists = safe_file(music_dir, song.filename) is not None
+            exists = song_file(song, music_dir, folders) is not None
             status = "ok" if exists else "missing"
             if song.status != status:
                 song.status = status

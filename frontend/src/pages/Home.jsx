@@ -1,9 +1,11 @@
 import { Pause, Play } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isPlayable } from "../api";
 import Cover from "../components/Cover";
+import MixCard from "../components/MixCard";
 import Shelf from "../components/Shelf";
 import { useLibrary, usePlayer, useUI } from "../context/hooks";
+import useMixes from "../hooks/useMixes";
 import useSongActions from "../hooks/useSongActions";
 import { greeting } from "../lib/format";
 
@@ -49,9 +51,56 @@ function ContinueListening({ songs }) {
   );
 }
 
+/** Hora actual que se renueva cada 30 s: el saludo cambia solo aunque la app siga abierta. */
+function useNow(ms = 30000) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), ms);
+    // al volver a la ventana (o despertar el equipo) se actualiza al momento
+    const onVisible = () => document.visibilityState === "visible" && setNow(new Date());
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [ms]);
+  return now;
+}
+
+function MadeForYou() {
+  const mixes = useMixes();
+  const { byId } = useLibrary();
+  const { navigate } = useUI();
+  const { playAll } = useSongActions();
+  if (!mixes?.length) return null;
+  const songsOf = (m) => m.song_ids.map((id) => byId.get(id)).filter(Boolean);
+  return (
+    <section className="shelf">
+      <header className="shelf__header">
+        <div>
+          <h2>Hechos para ti</h2>
+          <p className="muted">Mixes armados con lo que escuchas. El mix diario cambia cada día.</p>
+        </div>
+      </header>
+      <div className="mix-row">
+        {mixes.map((m) => (
+          <MixCard
+            key={m.id}
+            mix={m}
+            songs={songsOf(m)}
+            onOpen={(x) => navigate(`mix:${x.id}`)}
+            onPlay={(x) => playAll(songsOf(x), x.title)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const { playable, status } = useLibrary();
-  const { navigate } = useUI();
+  const { navigate, userName } = useUI();
+  const now = useNow();
 
   const sections = useMemo(() => {
     const byDate = (key) => (a, b) => (b[key] || "").localeCompare(a[key] || "");
@@ -70,9 +119,11 @@ export default function Home() {
 
   return (
     <div className="page page--home">
-      <h1 className="page-title">{greeting()}</h1>
+      <h1 className="page-title">{greeting(now, userName)}</h1>
 
       <ContinueListening songs={sections.continue.filter(isPlayable)} />
+
+      <MadeForYou />
 
       <Shelf
         title="Agregadas recientemente"

@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const DEFAULTS = {
+  userName: "", // para el saludo de Inicio ("Buenas noches, Daniel")
   musicDir: null, // se pide la primera vez
   closeToTray: true, // al cerrar la ventana sigue sonando en la bandeja
   openAtLogin: false, // iniciar con Windows (desactivado por defecto)

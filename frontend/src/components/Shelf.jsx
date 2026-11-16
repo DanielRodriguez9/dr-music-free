@@ -6,7 +6,7 @@ import SongCard from "./SongCard";
 /** Fila horizontal de tarjetas (una sola línea; se adapta al ancho). */
 export default function Shelf({ title, subtitle, songs, label, onSeeAll, empty }) {
   const { current, isPlaying } = usePlayer();
-  const { searchFor, openMenu } = useUI();
+  const { navigate, openMenu } = useUI();
   const { playFrom } = useSongActions();
 
   return (
@@ -34,7 +34,7 @@ export default function Shelf({ title, subtitle, songs, label, onSeeAll, empty }
               isPlaying={isPlaying}
               onPlay={(s) => playFrom(s, songs, label)}
               onMenu={(e, s) => openMenu(e, s, { list: songs, label })}
-              onArtist={searchFor}
+              onArtist={(key) => navigate(`artist:${key}`)}
             />
           ))}
         </div>

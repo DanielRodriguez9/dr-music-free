@@ -36,6 +36,16 @@ class Base(DeclarativeBase):
     pass
 
 
+class Folder(Base):
+    """Carpeta de música importada (los archivos se quedan donde están)."""
+    __tablename__ = "folders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    path: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    added_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    scanned_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
 class Song(Base):
     __tablename__ = "songs"
 
@@ -51,6 +61,10 @@ class Song(Base):
     status: Mapped[str] = mapped_column(String, default="ok")  # ok | missing
     youtube_id: Mapped[str | None] = mapped_column(String(11), unique=True, index=True)
     genre: Mapped[str | None] = mapped_column(String, index=True)
+    channel: Mapped[str | None] = mapped_column(String)  # canal de YouTube (para deducir el artista)
+    # canciones importadas de otra carpeta: filename es relativo a esa carpeta
+    folder_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id", ondelete="SET NULL"), index=True)
+    track_no: Mapped[int | None] = mapped_column(Integer)
     youtube_url: Mapped[str | None] = mapped_column(String)
     thumbnail_url: Mapped[str | None] = mapped_column(String)
     liked: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -156,6 +170,9 @@ def make_engine(db_path: Path):
 # Columnas añadidas después de la primera versión: (tabla, columna, definición SQL)
 _NEW_COLUMNS = [
     ("songs", "genre", "VARCHAR"),
+    ("songs", "channel", "VARCHAR"),
+    ("songs", "folder_id", "INTEGER REFERENCES folders(id) ON DELETE SET NULL"),
+    ("songs", "track_no", "INTEGER"),
     ("plays", "youtube_id", "VARCHAR(11)"),
     ("plays", "online", "BOOLEAN NOT NULL DEFAULT 0"),
 ]

@@ -21,12 +21,15 @@ export function formatDate(iso) {
   return Number.isNaN(d.getTime()) ? "" : dateFmt.format(d);
 }
 
-export function greeting(date = new Date()) {
-  const h = date.getHours();
-  if (h < 6) return "Buenas noches";
-  if (h < 12) return "Buenos días";
-  if (h < 20) return "Buenas tardes";
-  return "Buenas noches";
+/**
+ * Saludo según la hora local del equipo:
+ * "Buenos días" de 5:00 a 11:59, "Buenas tardes" de 12:00 a 18:29 y "Buenas noches" de 18:30 a 4:59.
+ */
+export function greeting(date = new Date(), name = "") {
+  const min = date.getHours() * 60 + date.getMinutes();
+  const text = min >= 5 * 60 && min < 12 * 60 ? "Buenos días" : min >= 12 * 60 && min < 18 * 60 + 30 ? "Buenas tardes" : "Buenas noches";
+  const clean = (name || "").trim();
+  return clean ? `${text}, ${clean}` : text;
 }
 
 export const plural = (n, one, many) => `${n.toLocaleString("es")} ${n === 1 ? one : many}`;

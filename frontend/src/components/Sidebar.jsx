@@ -1,4 +1,4 @@
-import { Download, Heart, History, House, Keyboard, Library, ListMusic, Plus, Search, Settings, Tag } from "lucide-react";
+import { Disc3, Download, Heart, History, House, Keyboard, Library, ListMusic, Mic2, Plus, Search, Settings, Tag } from "lucide-react";
 import { useState } from "react";
 import { useCollections, useLibrary, useUI } from "../context/hooks";
 import useSongActions from "../hooks/useSongActions";
@@ -9,6 +9,8 @@ const NAV = [
   { id: "home", label: "Inicio", icon: House },
   { id: "search", label: "Buscar", icon: Search },
   { id: "library", label: "Tu biblioteca", icon: Library },
+  { id: "artists", label: "Artistas", icon: Mic2 },
+  { id: "albums", label: "Álbumes", icon: Disc3 },
 ];
 
 /** Elemento del menú lateral que acepta canciones arrastradas. */

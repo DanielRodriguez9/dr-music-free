@@ -251,7 +251,10 @@ export default function useSongActions() {
     async (song) => {
       const ok = await ui.confirm({
         title: "¿Eliminar de la biblioteca?",
-        message: `"${song.title}" se borrará de la biblioteca y su archivo de audio se eliminará del disco. El historial de escuchas se conserva.`,
+        message:
+          song.folder_id != null
+            ? `"${song.title}" saldrá de la biblioteca. Es de una carpeta importada: el archivo NO se borra. El historial se conserva.`
+            : `"${song.title}" se borrará de la biblioteca y su archivo de audio se eliminará del disco. El historial de escuchas se conserva.`,
         confirmLabel: "Eliminar",
         danger: true,
       });

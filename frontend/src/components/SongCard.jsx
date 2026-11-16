@@ -1,5 +1,6 @@
 import { Pause, Play } from "lucide-react";
 import { artistLabel } from "../api";
+import ArtistLinks from "./ArtistLinks";
 import Cover from "./Cover";
 
 /** Tarjeta de canción para las filas de Inicio. */
@@ -24,10 +25,8 @@ export default function SongCard({ song, isCurrent, isPlaying, onPlay, onMenu, o
         </button>
       </h3>
       <p className="card__subtitle">
-        {song.artist ? (
-          <button type="button" className="link" onClick={() => onArtist(song.artist)}>
-            {song.artist}
-          </button>
+        {song.artist && !song.online ? (
+          <ArtistLinks artist={song.artist} onOpen={onArtist} />
         ) : (
           artistLabel(song)
         )}

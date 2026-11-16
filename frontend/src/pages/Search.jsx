@@ -4,31 +4,21 @@ import YouTubeResults from "../components/YouTubeResults";
 import { useLibrary, useUI } from "../context/hooks";
 import { normalize, plural } from "../lib/format";
 
-function artistCounts(songs) {
-  const map = new Map();
-  for (const s of songs) {
-    if (!s.artist) continue;
-    const key = normalize(s.artist);
-    const cur = map.get(key) ?? { name: s.artist, count: 0, plays: 0 };
-    cur.count += 1;
-    cur.plays += s.play_count || 0;
-    map.set(key, cur);
-  }
-  return [...map.values()];
-}
-
 const LIBRARY_PREVIEW = 10;
 
 export default function Search() {
-  const { songs } = useLibrary();
-  const { query, searchFor } = useUI();
+  const { songs, artists: artistIndex } = useLibrary();
+  const { query, navigate } = useUI();
   // la lista se filtra un instante después de teclear: la escritura nunca se traba
   const deferred = useDeferredValue(query);
   const q = normalize(deferred.trim());
   const [expanded, setExpanded] = useState({ q: "", all: false });
   const showAll = expanded.q === q && expanded.all;
 
-  const artists = useMemo(() => artistCounts(songs), [songs]);
+  const artists = useMemo(
+    () => [...artistIndex.values()].map((a) => ({ key: a.key, name: a.name, count: a.songs.length, plays: a.plays })),
+    [artistIndex],
+  );
 
   const results = useMemo(() => {
     if (!q) return { songs: [], artists: [] };
@@ -62,7 +52,7 @@ export default function Search() {
         <h2 className="section-title">Tus artistas</h2>
         <div className="chips">
           {top.map((a) => (
-            <button key={a.name} type="button" className="chip" onClick={() => searchFor(a.name)}>
+            <button key={a.key} type="button" className="chip" onClick={() => navigate(`artist:${a.key}`)}>
               {a.name}
               <span className="chip__count">{a.count}</span>
             </button>
@@ -80,7 +70,7 @@ export default function Search() {
           <h2 className="section-title">Artistas</h2>
           <div className="chips">
             {results.artists.map((a) => (
-              <button key={a.name} type="button" className="chip" onClick={() => searchFor(a.name)}>
+              <button key={a.key} type="button" className="chip" onClick={() => navigate(`artist:${a.key}`)}>
                 {a.name}
                 <span className="chip__count">{a.count}</span>
               </button>

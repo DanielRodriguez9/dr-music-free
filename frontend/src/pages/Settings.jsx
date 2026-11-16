@@ -2,6 +2,7 @@ import { FolderOpen, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { api, desktop, errorMessage } from "../api";
+import { LibraryCard, ProfileCard } from "../components/LibrarySettings";
 import { useUI } from "../context/hooks";
 import { updateYtdlp } from "../lib/ytdlp";
 
@@ -91,6 +92,8 @@ export default function Settings() {
     <div className="page page--settings">
       <h1 className="page-title">Ajustes</h1>
 
+      <ProfileCard />
+
       <section className="settings-card">
         <h2>Música</h2>
         <Row label="Carpeta de música" value={info?.music_path}>
@@ -109,6 +112,8 @@ export default function Settings() {
         </Row>
         {!desktop && <p className="muted small">La carpeta se cambia desde la app de escritorio.</p>}
       </section>
+
+      <LibraryCard />
 
       {desktop && prefs && (
         <section className="settings-card">

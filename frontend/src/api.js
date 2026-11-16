@@ -55,9 +55,14 @@ export const isPlayable = (song) => Boolean(song?.public_url);
 export const artistLabel = (song) =>
   song?.artist || (song?.source === "local" ? "Archivo local" : song?.online ? "YouTube" : "Artista desconocido");
 
-// Miniaturas de YouTube, de mejor a peor. hq720/maxres/mq no tienen franjas negras;
-// hqdefault (4:3) es el último recurso. Si ninguna existe, <Cover> muestra una nota musical.
+// Carátulas: las de la biblioteca se guardan en disco (funcionan sin internet) y las sirve
+// el servidor. Las canciones en línea usan las miniaturas de YouTube, de mejor a peor
+// (hq720/maxres/mq no tienen franjas negras; hqdefault 4:3 es el último recurso).
+// Si ninguna existe, <Cover> muestra una nota musical.
+export const coverUrlForId = (id) => `${API_BASE}/cover/${id}`;
+
 export function coverUrls(song) {
+  if (song && typeof song.id === "number") return [coverUrlForId(song.id)];
   const id = song?.youtube_id;
   if (!id) return song?.thumbnail_url ? [song.thumbnail_url] : [];
   return ["hq720", "maxresdefault", "mqdefault", "hqdefault"].map((f) => `https://i.ytimg.com/vi/${id}/${f}.jpg`);

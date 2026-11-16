@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE, api, errorMessage, isPlayable, waitForDownload } from "../api";
+import { buildAlbumIndex, buildArtistIndex } from "../lib/artists";
 import { load, save } from "../lib/storage";
 import { LibraryContext } from "./contexts";
 
@@ -62,6 +63,8 @@ export default function LibraryProvider({ children }) {
   }, [songs, online]);
   const byYoutubeId = useMemo(() => new Map(songs.filter((s) => s.youtube_id).map((s) => [s.youtube_id, s])), [songs]);
   const playable = useMemo(() => songs.filter(isPlayable), [songs]);
+  const artists = useMemo(() => buildArtistIndex(songs), [songs]);
+  const albums = useMemo(() => buildAlbumIndex(songs), [songs]);
 
   const stats = useMemo(() => {
     const duration = playable.reduce((acc, s) => acc + (s.duration || 0), 0);
@@ -153,6 +156,8 @@ export default function LibraryProvider({ children }) {
       byYoutubeId,
       registerOnline,
       applySongs,
+      artists,
+      albums,
       playable,
       stats,
       status,
@@ -167,7 +172,7 @@ export default function LibraryProvider({ children }) {
       downloads,
       activeDownloads,
     }),
-    [songs, byId, byYoutubeId, registerOnline, applySongs, playable, stats, status, error, fetchSongs, deleteSong, updateSong, recordPlay, playsVersion, toggleLike, download, downloads, activeDownloads],
+    [songs, byId, byYoutubeId, registerOnline, applySongs, artists, albums, playable, stats, status, error, fetchSongs, deleteSong, updateSong, recordPlay, playsVersion, toggleLike, download, downloads, activeDownloads],
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;

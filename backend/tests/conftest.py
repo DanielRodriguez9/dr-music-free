@@ -8,6 +8,7 @@ _TMP = Path(tempfile.mkdtemp(prefix="drmusic-tests-"))
 os.environ["DATA_DIR"] = str(_TMP / "data")
 os.environ["MUSIC_PATH"] = str(_TMP / "music")
 os.environ.pop("DB_PATH", None)
+os.environ["DRMUSIC_BACKGROUND"] = "0"  # sin hilos de fondo (red) en los tests
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402

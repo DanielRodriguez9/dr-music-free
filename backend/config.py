@@ -48,6 +48,8 @@ class Settings:
         self.ytdlp_path = Path(ytdlp) if ytdlp else (self.data_dir / "bin" / "yt-dlp.exe" if bundled else None)
         self.ytdlp_js_runtime = os.getenv("YTDLP_JS_RUNTIME") or None
         self.ytdlp_env = {"ELECTRON_RUN_AS_NODE": "1"} if os.getenv("YTDLP_RUN_AS_NODE") == "1" else {}
+        # tareas de fondo al arrancar (carátulas, carpetas importadas); los tests las apagan
+        self.background = os.getenv("DRMUSIC_BACKGROUND", "1") == "1"
 
     def ensure_dirs(self) -> None:
         self.music_dir.mkdir(parents=True, exist_ok=True)

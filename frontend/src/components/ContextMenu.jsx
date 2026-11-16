@@ -1,10 +1,11 @@
 import {
   Check, ChevronLeft, ChevronRight, CloudDownload, Download, ExternalLink, Heart, HeartOff, ListEnd, ListMinus,
-  ListMusic, ListPlus, ListStart, Pause, Pencil, Play, Plus, RotateCw, Tag, Trash2, User,
+  Disc3, ListMusic, ListPlus, ListStart, Pause, Pencil, Play, Plus, RotateCw, Tag, Trash2, User,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { errorMessage, isOnline, isPlayable } from "../api";
+import { albumKey, artistKey, splitArtists } from "../lib/artists";
 import { useCollections, usePlayer, useUI } from "../context/hooks";
 import useSongActions from "../hooks/useSongActions";
 
@@ -37,7 +38,7 @@ function SongMenu({ menu, close }) {
   const player = usePlayer();
   const actions = useSongActions();
   const { playlists, genres, playlistById } = useCollections();
-  const { searchFor } = useUI();
+  const { navigate } = useUI();
   const [page, setPage] = useState(context.page || "main");
 
   const selection = context.selection?.length > 1 ? context.selection : null;
@@ -183,7 +184,12 @@ function SongMenu({ menu, close }) {
         () => actions.toggleLike(song),
       )}
       <hr />
-      {song.artist && item(<User size={16} />, `Ver más de ${song.artist}`, () => searchFor(song.artist))}
+      {splitArtists(song.artist)
+        .slice(0, 3)
+        .map((name) => (
+          <Item key={name} icon={<User size={16} />} label={`Ir a ${name}`} onClick={() => navigate(`artist:${artistKey(name)}`)} close={close} />
+        ))}
+      {song.album && item(<Disc3 size={16} />, `Ir al álbum ${song.album}`, () => navigate(`album:${albumKey(song)}`))}
       {song.youtube_url &&
         item(<ExternalLink size={16} />, "Abrir en YouTube", () => window.open(song.youtube_url, "_blank", "noopener"))}
       {playable && item(<Download size={16} />, "Guardar una copia...", () => actions.saveCopy(song))}

@@ -7,7 +7,8 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,14 +18,18 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from config import Settings, settings as default_settings
-from db import (Genre, Play, Playlist, PlaylistItem, Song, counts_as_play, init_db, make_engine,
-                make_session_factory, utcnow)
+from db import (Folder, Genre, Play, Playlist, PlaylistItem, Song, backup_database, counts_as_play, init_db,
+                make_engine, make_session_factory, utcnow)
 import ytdlp_tool
 from downloader import Downloader
-from library import is_youtube_url, safe_file, sync_file_status, youtube_id
+from covers import CoverStore
+from fixes import FixFinder
+from importer import Importer
+from library import is_youtube_url, song_file, sync_file_status, youtube_id
+from mixes import build_mixes
 from youtube import YouTube, YouTubeError
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 _VIDEO_ID = re.compile(r"^[0-9A-Za-z_-]{11}$")
 log = logging.getLogger("drmusic")
 
@@ -46,6 +51,9 @@ class SongOut(BaseModel):
     status: str
     youtube_id: str | None
     genre: str | None = None
+    channel: str | None = None
+    folder_id: int | None = None
+    track_no: int | None = None
     youtube_url: str | None
     thumbnail_url: str | None
     liked: bool
@@ -120,6 +128,20 @@ class DownloadIn(BaseModel):
     url: str
 
 
+class FolderIn(BaseModel):
+    path: str = Field(min_length=1, max_length=1000)
+
+
+class FixItem(BaseModel):
+    song_id: int
+    artist: str | None = Field(default=None, max_length=300)
+    title: str = Field(min_length=1, max_length=500)
+
+
+class FixApply(BaseModel):
+    items: list[FixItem] = Field(min_length=1, max_length=20000)
+
+
 def playlist_out(pl: Playlist, items: list[PlaylistItem]) -> dict:
     return {
         "id": pl.id, "name": pl.name,
@@ -157,7 +179,14 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if cfg.background:
+            # carpetas importadas: buscar archivos nuevos; carátulas: guardar las que faltan
+            for f in app.state.importer.folders():
+                app.state.importer.scan_async(f["id"])
+            import threading
+            threading.Timer(20, app.state.covers.fill_missing).start()
         yield
+        app.state.covers.stop()
         app.state.downloader.shutdown()
         engine.dispose()
 
@@ -170,6 +199,9 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         exe_cmd=[str(ytdlp_exe)] if ytdlp_exe else None,
         js_runtime=cfg.ytdlp_js_runtime, exe_env=cfg.ytdlp_env,
     )
+    app.state.covers = CoverStore(cfg.data_dir / "covers", sessions, cfg.music_dir)
+    app.state.importer = Importer(sessions)
+    app.state.fixes = FixFinder(sessions, cfg.music_dir)
     app.state.youtube = youtube or YouTube(
         exe_cmd=[str(ytdlp_exe)] if ytdlp_exe else None,
         js_runtime=cfg.ytdlp_js_runtime, exe_env=cfg.ytdlp_env,
@@ -258,10 +290,16 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         db.commit()
         return [song_out(s) for s in db.scalars(select(Song).where(Song.id.in_(ids)).order_by(Song.id))]
 
+    def folder_map(db: Session) -> dict[int, Path]:
+        return {f.id: Path(f.path) for f in db.scalars(select(Folder))}
+
+    def file_of(db: Session, song: Song) -> Path | None:
+        return song_file(song, cfg.music_dir, folder_map(db))
+
     @app.get("/songs/{song_id}/audio")
     def song_audio(song_id: int, db: Session = Depends(get_db)):
         song = get_song_or_404(song_id, db)
-        path = safe_file(cfg.music_dir, song.filename)
+        path = file_of(db, song)
         if not path:
             raise HTTPException(404, "El archivo de audio no existe")
         return FileResponse(path)
@@ -269,12 +307,16 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
     @app.delete("/songs/{song_id}")
     def delete_song(song_id: int, db: Session = Depends(get_db)):
         song = get_song_or_404(song_id, db)
-        shared = db.scalar(
-            select(func.count(Song.id)).where(Song.filename == song.filename, Song.id != song.id)
-        ) if song.filename else 0
-        path = safe_file(cfg.music_dir, song.filename)
-        if path and not shared:
-            path.unlink()
+        if song.folder_id is None:
+            # descargada en la carpeta de música: se borra también el archivo
+            shared = db.scalar(
+                select(func.count(Song.id)).where(Song.filename == song.filename, Song.id != song.id,
+                                                  Song.folder_id.is_(None))
+            ) if song.filename else 0
+            path = file_of(db, song)
+            if path and not shared:
+                path.unlink()
+        # importada de otra carpeta: solo se quita de la biblioteca, el archivo no se toca
         db.delete(song)
         db.commit()
         return {"status": "success", "message": "Canción eliminada"}
@@ -282,6 +324,88 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
     @app.get("/thumb/{song_id}")
     def get_thumbnail(song_id: int, db: Session = Depends(get_db)):
         return {"thumbnail_url": get_song_or_404(song_id, db).thumbnail_url}
+
+    # ---------- carátulas en disco ----------
+    @app.get("/cover/{song_id}")
+    def song_cover(song_id: int, db: Session = Depends(get_db)):
+        song = get_song_or_404(song_id, db)
+        path = request_cover(db, song)
+        if not path:
+            raise HTTPException(404, "Sin carátula")
+        # "*": la misma respuesta en caché sirve para <img> y para fetch() (imágenes locales, sin datos privados)
+        return FileResponse(path, media_type="image/jpeg",
+                            headers={"Cache-Control": "max-age=86400", "Access-Control-Allow-Origin": "*"})
+
+    def request_cover(db: Session, song: Song) -> Path | None:
+        store: CoverStore = app.state.covers
+        return store.cached(song) or store.get(song, folder_map(db))
+
+    @app.get("/covers/status")
+    def covers_status(request: Request):
+        return request.app.state.covers.stats()
+
+    @app.post("/covers/fill", status_code=202)
+    def covers_fill(request: Request):
+        request.app.state.covers.fill_missing()
+        return request.app.state.covers.stats()
+
+    # ---------- mixes ----------
+    @app.get("/mixes/")
+    def mixes(day: date | None = None, db: Session = Depends(get_db)):
+        return build_mixes(db, day)
+
+    # ---------- carpetas importadas ----------
+    @app.get("/folders/")
+    def list_folders(request: Request):
+        return request.app.state.importer.folders()
+
+    @app.post("/folders/", status_code=201)
+    def add_folder(body: FolderIn, request: Request):
+        try:
+            folder = request.app.state.importer.add_folder(body.path, cfg.music_dir)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        request.app.state.importer.scan_async(folder.id)
+        return request.app.state.importer.folders()
+
+    @app.post("/folders/{folder_id}/scan", status_code=202)
+    def rescan_folder(folder_id: int, request: Request, db: Session = Depends(get_db)):
+        if not db.get(Folder, folder_id):
+            raise HTTPException(404, "Carpeta no encontrada")
+        request.app.state.importer.scan_async(folder_id)
+        return request.app.state.importer.folders()
+
+    @app.delete("/folders/{folder_id}")
+    def remove_folder(folder_id: int, request: Request):
+        removed = request.app.state.importer.remove_folder(folder_id)
+        return {"removed": removed, "folders": request.app.state.importer.folders()}
+
+    # ---------- corregir artistas ----------
+    @app.post("/fixes/analyze", status_code=202)
+    def fixes_analyze(request: Request):
+        return request.app.state.fixes.start()
+
+    @app.get("/fixes/")
+    def fixes_state(request: Request):
+        return request.app.state.fixes.state
+
+    @app.post("/fixes/apply")
+    def fixes_apply(body: FixApply, request: Request, db: Session = Depends(get_db)):
+        """Aplica las correcciones que el usuario revisó (antes guarda una copia de la base)."""
+        backup = backup_database(cfg.db_path, "antes-de-corregir-artistas")
+        items = {i.song_id: i for i in body.items}
+        changed = []
+        for song in db.scalars(select(Song).where(Song.id.in_(items))):
+            it = items[song.id]
+            song.artist = (it.artist or "").strip() or None
+            song.title = it.title.strip()
+            changed.append(song)
+        db.commit()
+        fixes = request.app.state.fixes
+        if fixes.state.get("proposals"):
+            fixes.state["proposals"] = [p for p in fixes.state["proposals"] if p["song_id"] not in items]
+        return {"changed": len(changed), "backup": str(backup) if backup else None,
+                "songs": [song_out(s).model_dump(mode="json") for s in changed]}
 
     # ---------- géneros ----------
     def ensure_genre(db: Session, name: str | None) -> str | None:

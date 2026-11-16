@@ -6,6 +6,7 @@ import { artistLabel, isOnline } from "../api";
 import { usePlayer, usePlayerTime, useUI } from "../context/hooks";
 import useSongActions from "../hooks/useSongActions";
 import { formatTime } from "../lib/format";
+import ArtistLinks from "./ArtistLinks";
 import Cover from "./Cover";
 import LikeButton from "./LikeButton";
 import Slider from "./Slider";
@@ -44,7 +45,7 @@ function VolumeIcon({ volume, muted }) {
 export default function PlayerBar() {
   const player = usePlayer();
   const { current, isPlaying, loading, queue, volume, muted } = player;
-  const { searchFor, queueOpen, toggleQueue } = useUI();
+  const { navigate, queueOpen, toggleQueue } = useUI();
   const { toggleLike, downloadOnline } = useSongActions();
   const [downloading, setDownloading] = useState(null); // id en línea que se está descargando
   const empty = !current;
@@ -65,10 +66,10 @@ export default function PlayerBar() {
                   <Globe size={11} /> En línea
                 </span>
               )}
-              {current.artist ? (
-                <button type="button" className="link playerbar__artist" onClick={() => searchFor(current.artist)}>
-                  {current.artist}
-                </button>
+              {current.artist && !online ? (
+                <span className="playerbar__artist">
+                  <ArtistLinks artist={current.artist} onOpen={(key) => navigate(`artist:${key}`)} />
+                </span>
               ) : (
                 <span className="playerbar__artist">{artistLabel(current)}</span>
               )}

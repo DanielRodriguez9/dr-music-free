@@ -18,6 +18,10 @@ import Collection from "./pages/Collection";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import Home from "./pages/Home";
+import { AlbumPage, AlbumsPage } from "./pages/Albums";
+import { ArtistPage, ArtistsPage } from "./pages/Artists";
+import Fixes from "./pages/Fixes";
+import MixPage from "./pages/Mix";
 import { GenrePage, PlaylistPage } from "./pages/Playlist";
 import Search from "./pages/Search";
 import { parseView } from "./lib/views";
@@ -72,6 +76,9 @@ function Content() {
   const { name, param } = parseView(view);
   if (name === "playlist") return <PlaylistPage id={param} />;
   if (name === "genre") return <GenrePage name={param} />;
+  if (name === "artist") return <ArtistPage id={param} />;
+  if (name === "album") return <AlbumPage id={param} />;
+  if (name === "mix") return <MixPage id={param} />;
   switch (view) {
     case "search":
       return <Search />;
@@ -99,6 +106,12 @@ function Content() {
       );
     case "history":
       return <History />;
+    case "artists":
+      return <ArtistsPage />;
+    case "albums":
+      return <AlbumsPage />;
+    case "fixes":
+      return <Fixes />;
     case "settings":
       return <Settings />;
     default:

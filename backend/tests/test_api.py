@@ -14,7 +14,7 @@ def wait_job(client, job_id, timeout=5):
 
 
 def test_home(client):
-    assert client.get("/").json()["version"] == "2.1.0"
+    assert client.get("/").json()["version"] == "2.2.0"
 
 
 def test_list_and_get_songs(client, add_song):

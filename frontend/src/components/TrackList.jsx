@@ -6,6 +6,7 @@ import useSongActions from "../hooks/useSongActions";
 import useStableHandlers from "../hooks/useStableHandlers";
 import { DRAG_TYPE, setDragImage } from "../lib/drag";
 import { formatDate, formatTime } from "../lib/format";
+import ArtistLinks from "./ArtistLinks";
 import Cover from "./Cover";
 import Equalizer from "./Equalizer";
 import LikeButton from "./LikeButton";
@@ -69,9 +70,9 @@ const TrackRow = memo(function TrackRow({
               </span>
             )}
             {song.artist ? (
-              <button type="button" className="link" onClick={() => h.artist(song.artist)}>
-                {song.artist}
-              </button>
+              <span className="track__artists">
+                <ArtistLinks artist={song.artist} onOpen={h.artist} />
+              </span>
             ) : (
               artistLabel(song)
             )}
@@ -146,7 +147,7 @@ export default function TrackList({
   songs, contextLabel, showAdded = true, showPlays = false, showGenre = false, sort, onSort, playlist = null, onReorder,
 }) {
   const { current, isPlaying } = usePlayer();
-  const { searchFor, openMenu, navigate } = useUI();
+  const { openMenu, navigate } = useUI();
   const actions = useSongActions();
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [dropAt, setDropAt] = useState(null); // { index, side: "before" | "after" }
@@ -165,7 +166,7 @@ export default function TrackList({
   const h = useStableHandlers({
     play: (song) => actions.playFrom(song, songs, contextLabel),
     like: actions.toggleLike,
-    artist: searchFor,
+    artist: (key) => navigate(`artist:${key}`),
     genre: (g) => navigate(`genre:${g}`),
     select: (e, song, index) => {
       if (e.target.closest("button, a")) return;

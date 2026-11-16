@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { desktop } from "../api";
 import { load, save } from "../lib/storage";
 import { isView } from "../lib/views";
 import { UIContext } from "./contexts";
@@ -9,6 +10,8 @@ export default function UIProvider({ children }) {
     return isView(v) ? v : "home";
   });
   const [query, setQuery] = useState("");
+  // nombre para el saludo de Inicio: en la app de escritorio vive en settings.json
+  const [userName, setUserNameState] = useState(() => (desktop ? desktop.userName || "" : load("userName", "")));
   const [queueOpen, setQueueOpen] = useState(() => Boolean(load("queueOpen", false)));
   const [dialog, setDialog] = useState(null); // { type: "download" | "shortcuts" | "confirm", ... }
   const [menu, setMenu] = useState(null); // { x, y, song, context }
@@ -20,6 +23,14 @@ export default function UIProvider({ children }) {
     setView(next);
     save("view", next);
     scrollRef.current?.scrollTo({ top: 0 });
+  }, []);
+
+  const setUserName = useCallback((name) => {
+    const clean = (name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    setUserNameState(clean);
+    if (desktop) return desktop.setSetting("userName", clean);
+    save("userName", clean);
+    return Promise.resolve();
   }, []);
 
   const focusSearch = useCallback(() => {
@@ -91,6 +102,8 @@ export default function UIProvider({ children }) {
       navigate,
       query,
       setQuery,
+      userName,
+      setUserName,
       searchFor,
       searchRef,
       scrollRef,
@@ -106,7 +119,7 @@ export default function UIProvider({ children }) {
       openMenu,
       closeMenu,
     }),
-    [view, navigate, query, searchFor, focusSearch, queueOpen, toggleQueue, dialog, closeDialog, confirm, prompt, menu, openMenu, closeMenu],
+    [view, navigate, query, userName, setUserName, searchFor, focusSearch, queueOpen, toggleQueue, dialog, closeDialog, confirm, prompt, menu, openMenu, closeMenu],
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

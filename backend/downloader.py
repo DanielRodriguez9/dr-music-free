@@ -255,6 +255,7 @@ class Downloader:
             song.artist = artist
             song.album = info.get("album") or song.album
             song.original_title = raw_title
+            song.channel = info.get("channel") or info.get("uploader") or song.channel
             song.youtube_url = job.url
             song.thumbnail_url = info.get("thumbnail") or thumbnail_for(job.youtube_id)
             song.filename = path.name

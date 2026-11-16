@@ -97,7 +97,6 @@ function backend() {
       "--exclude-module", "pytest",
       "--exclude-module", "pg8000",
       "--exclude-module", "tkinter",
-      "--exclude-module", "PIL",
     ],
     BACKEND,
   );

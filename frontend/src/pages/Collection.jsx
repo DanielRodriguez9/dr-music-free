@@ -1,6 +1,7 @@
-import { Heart, Library, ListFilter, ListMusic, Pencil, Play, Shuffle, Tag, Trash2 } from "lucide-react";
+import { Disc3, Heart, Library, ListFilter, ListMusic, Mic2, Pencil, Play, Shuffle, Sparkles, Tag, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { isPlayable } from "../api";
+import Cover from "../components/Cover";
 import TrackList from "../components/TrackList";
 import { useCollections } from "../context/hooks";
 import useSongActions from "../hooks/useSongActions";
@@ -18,7 +19,7 @@ const BASE_SORTS = {
 // en una lista de reproducción, el orden propio es el primero
 const PLAYLIST_SORTS = { position: { label: "Orden de la lista", dir: "asc" }, ...BASE_SORTS };
 
-const ICONS = { library: Library, liked: Heart, playlist: ListMusic, genre: Tag };
+const ICONS = { library: Library, liked: Heart, playlist: ListMusic, genre: Tag, artist: Mic2, album: Disc3, mix: Sparkles };
 const NO_GENRE = "__none__";
 
 const matches = (song, q) =>
@@ -31,11 +32,14 @@ const matches = (song, q) =>
  */
 export default function Collection({
   id, title, kicker, icon = "library", songs, emptyText, playlist = null, genreFilter = false, actions: extraActions,
+  heroSong = null, orderLabel = null, defaultSortKey = null, subtitle = null, beforeList = null, showGenre,
 }) {
   const { playAll, renamePlaylist, deletePlaylist } = useSongActions();
   const { genres, reorderPlaylist } = useCollections();
-  const sorts = playlist ? PLAYLIST_SORTS : BASE_SORTS;
-  const defaultSort = playlist ? { key: "position", dir: "asc" } : { key: "created_at", dir: "desc" };
+  // orden propio: el de la lista, el del mix o el del álbum
+  const sorts = playlist ? PLAYLIST_SORTS : orderLabel ? { position: { label: orderLabel, dir: "asc" }, ...BASE_SORTS } : BASE_SORTS;
+  const defaultKey = playlist || orderLabel ? "position" : defaultSortKey || "created_at";
+  const defaultSort = { key: defaultKey, dir: sorts[defaultKey].dir };
   const [sortState, setSort] = useState(() => load(`sort.${id}`, defaultSort));
   const sort = sorts[sortState.key] ? sortState : defaultSort;
   const [filter, setFilter] = useState("");
@@ -82,9 +86,13 @@ export default function Collection({
   return (
     <div className="page">
       <header className={`hero hero--${icon}`}>
-        <div className="hero__art" aria-hidden="true">
-          <Icon size={64} fill={icon === "liked" ? "currentColor" : "none"} />
-        </div>
+        {heroSong ? (
+          <Cover song={heroSong} size="hero" className="hero__art hero__art--cover" />
+        ) : (
+          <div className="hero__art" aria-hidden="true">
+            <Icon size={64} fill={icon === "liked" ? "currentColor" : "none"} />
+          </div>
+        )}
         <div className="hero__text">
           <p className="hero__kicker">{kicker}</p>
           {playlist ? (
@@ -96,6 +104,7 @@ export default function Collection({
           ) : (
             <h1>{title}</h1>
           )}
+          {subtitle && <p className="hero__subtitle">{subtitle}</p>}
           <p className="hero__meta">
             {plural(playable.length, "canción", "canciones")} · {formatTotal(total)}
             {missing > 0 && <span className="muted"> · {plural(missing, "sin archivo", "sin archivo")}</span>}
@@ -166,6 +175,8 @@ export default function Collection({
         </select>
       </div>
 
+      {beforeList}
+
       {playlist && !canReorder && shown.length > 1 && (
         <p className="muted small reorder-hint">Para reordenar arrastrando, elige «Orden de la lista» y borra el filtro.</p>
       )}
@@ -181,7 +192,7 @@ export default function Collection({
           sort={sort}
           onSort={(key) => (key in sorts ? changeSort(key) : null)}
           showPlays
-          showGenre={icon !== "genre"}
+          showGenre={showGenre ?? icon !== "genre"}
           playlist={playlist}
           onReorder={onReorder}
         />
