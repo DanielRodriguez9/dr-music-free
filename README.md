@@ -1,164 +1,168 @@
 # 🎵 DR Music Free
 
-Reproductor de música de escritorio para Windows. Organiza y reproduce tu biblioteca local sin depender de internet, con listas, mixes automáticos según lo que escuchas y, de forma opcional, búsqueda y descarga desde YouTube.
+🌐 **English** · [Español](README.es.md)
 
-![Versión](https://img.shields.io/badge/versión-2.2.0-blue)
+Desktop music player for Windows. Organize and play your local library without depending on the internet, with playlists, automatic mixes based on what you listen to and, optionally, search and download from YouTube.
+
+> **Note:** the app's user interface is currently in Spanish.
+
+![Version](https://img.shields.io/badge/version-2.2.0-blue)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6)
 ![Electron](https://img.shields.io/badge/Electron-45-47848F)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688)
-![Licencia](https://img.shields.io/badge/licencia-MIT-green)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 <p align="center">
-  <img src="docs/screenshots/inicio-mixes.webp" width="900" alt="Inicio con los mixes automáticos">
+  <img src="docs/screenshots/inicio-mixes.webp" width="900" alt="Home with the automatic mixes">
 </p>
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/biblioteca.webp" alt="Biblioteca"></td>
-    <td><img src="docs/screenshots/artistas.webp" alt="Artistas"></td>
+    <td><img src="docs/screenshots/biblioteca.webp" alt="Library"></td>
+    <td><img src="docs/screenshots/artistas.webp" alt="Artists"></td>
   </tr>
   <tr>
-    <td align="center">Biblioteca</td>
-    <td align="center">Artistas</td>
+    <td align="center">Library</td>
+    <td align="center">Artists</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/busqueda-youtube.webp" alt="Búsqueda en la biblioteca y en YouTube"></td>
-    <td><img src="docs/screenshots/historial.webp" alt="Historial de escuchas"></td>
+    <td><img src="docs/screenshots/busqueda-youtube.webp" alt="Search in the library and on YouTube"></td>
+    <td><img src="docs/screenshots/historial.webp" alt="Listening history"></td>
   </tr>
   <tr>
-    <td align="center">Búsqueda en la biblioteca y en YouTube</td>
-    <td align="center">Historial de escuchas</td>
+    <td align="center">Search in the library and on YouTube</td>
+    <td align="center">Listening history</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/genero.webp" alt="Página de un género"></td>
+    <td><img src="docs/screenshots/genero.webp" alt="Genre page"></td>
     <td></td>
   </tr>
   <tr>
-    <td align="center">Géneros</td>
+    <td align="center">Genres</td>
     <td></td>
   </tr>
 </table>
 
 ---
 
-## ⚠️ Aviso legal
+## ⚠️ Legal notice
 
-**Esta herramienta es para fines EDUCATIVOS y USO PERSONAL.**
+**This tool is for EDUCATIONAL purposes and PERSONAL USE only.**
 
-- El usuario es el único responsable del uso que le dé
-- No fomentamos la piratería
-- No descargues contenido con derechos de autor sin permiso
-
----
-
-## ✨ Funciones
-
-- **Biblioteca local** guardada en SQLite, sin servidor de base de datos.
-- **Listas de reproducción** y **géneros**.
-- **Páginas de artistas y álbumes**. Las colaboraciones ("Feid, El Americano") enlazan a cada artista.
-- **Mixes automáticos según el historial**:
-  - mix diario;
-  - más escuchadas de siempre y del último mes;
-  - mix por artista y por género;
-  - "hace rato no escuchas";
-  - recién agregadas.
-- **Cola de reproducción** con aleatorio y repetición.
-- **Favoritas** e **historial de escuchas**.
-- **Atajos de teclado** y **teclas multimedia** del teclado y de Windows.
-- **Bandeja del sistema**: la app puede seguir sonando con la ventana cerrada.
-- **Carátulas sin conexión**: se guardan en disco a partir de la carátula del archivo o de la miniatura del video.
-- **Importación de carpetas** del equipo. Los archivos se leen donde están, nunca se mueven ni se borran.
-- **Corrección automática de artistas** para canciones sin artista, con artista y título invertidos o con el mismo artista escrito de varias formas. Primero se proponen los cambios y no se aplica nada hasta que el usuario los revisa.
-- **Búsqueda y descarga opcional desde YouTube**: reproducción en línea o descarga a MP3 con metadatos.
+- The user is solely responsible for how it is used
+- We do not encourage piracy
+- Do not download copyrighted content without permission
 
 ---
 
-## 🛠️ Stack tecnológico
+## ✨ Features
 
-| Capa | Tecnologías |
+- **Local library** stored in SQLite, no database server needed.
+- **Playlists** and **genres**.
+- **Artist and album pages**. Collaborations ("Feid, El Americano") link to each artist.
+- **Automatic mixes based on listening history**:
+  - daily mix;
+  - all-time and last-month most played;
+  - per-artist and per-genre mixes;
+  - "haven't heard in a while";
+  - recently added.
+- **Play queue** with shuffle and repeat.
+- **Favorites** and **listening history**.
+- **Keyboard shortcuts** and **media keys** (keyboard and Windows).
+- **System tray**: music can keep playing with the window closed.
+- **Offline cover art**: saved to disk from the file's embedded artwork or the video thumbnail.
+- **Folder import** from your computer. Files are read where they are; they are never moved or deleted.
+- **Automatic artist correction** for songs with no artist, with artist and title swapped, or with the same artist spelled in different ways. Changes are proposed first and nothing is applied until the user reviews them.
+- **Optional YouTube search and download**: stream online or download to MP3 with metadata.
+
+---
+
+## 🛠️ Tech stack
+
+| Layer | Technologies |
 |------|-------------|
-| **Escritorio** | Electron |
-| **Interfaz** | React, Vite |
-| **Servidor** | Python, FastAPI, SQLAlchemy, SQLite |
+| **Desktop** | Electron |
+| **Interface** | React, Vite |
+| **Server** | Python, FastAPI, SQLAlchemy, SQLite |
 | **Audio** | FFmpeg, yt-dlp |
-| **Empaquetado** | PyInstaller (servidor), electron-builder (instalador NSIS) |
+| **Packaging** | PyInstaller (server), electron-builder (NSIS installer) |
 
 ---
 
-## 🧩 Arquitectura
+## 🧩 Architecture
 
 ```
-Electron (proceso principal)
- ├─ 1. busca un puerto libre y lanza ──► Servidor Python (FastAPI)
- │                                         ├─ SQLite (biblioteca, historial, listas)
- │                                         ├─ carpeta de música y carpetas importadas
- │                                         └─ FFmpeg / yt-dlp
- └─ 2. abre la ventana ──► Interfaz React ◄── HTTP en 127.0.0.1:<puerto> ──► Servidor
+Electron (main process)
+ ├─ 1. finds a free port and launches ──► Python server (FastAPI)
+ │                                          ├─ SQLite (library, history, playlists)
+ │                                          ├─ music folder and imported folders
+ │                                          └─ FFmpeg / yt-dlp
+ └─ 2. opens the window ──► React interface ◄── HTTP on 127.0.0.1:<port> ──► Server
 ```
 
-1. Al arrancar, Electron busca un **puerto libre** en `127.0.0.1` y lanza el servidor Python:
-   - en la app instalada, el ejecutable creado con PyInstaller;
-   - en desarrollo, `backend/venv`.
-2. Espera a que el servidor responda y abre la ventana. La interfaz React recibe el puerto y habla con la API por HTTP local.
-3. El servidor gestiona la biblioteca (SQLite), sirve el audio con soporte de rangos, guarda las carátulas, calcula los mixes y se encarga de las descargas.
-4. Al cerrar la app, Electron detiene el servidor.
+1. On startup, Electron finds a **free port** on `127.0.0.1` and launches the Python server:
+   - in the installed app, the executable built with PyInstaller;
+   - in development, `backend/venv`.
+2. It waits for the server to respond and opens the window. The React interface receives the port and talks to the API over local HTTP.
+3. The server manages the library (SQLite), serves audio with range support, stores cover art, builds the mixes and handles downloads.
+4. When the app closes, Electron stops the server.
 
-Los datos viven en `%APPDATA%\DR Music Free`: base de datos, ajustes, carátulas y copias de seguridad. Desinstalar la app no los borra, ni tampoco la música.
+Data lives in `%APPDATA%\DR Music Free`: database, settings, cover art and backups. Uninstalling the app does not delete it, nor the music.
 
 ---
 
-## 🚀 Desarrollo
+## 🚀 Development
 
-### Requisitos
+### Requirements
 
-- Windows 10 u 11
+- Windows 10 or 11
 - Python 3.12+
 - Node.js 20+
-- FFmpeg (en el `PATH`, o en `desktop/vendor/bin` con `node scripts/build.mjs vendor`)
+- FFmpeg (on the `PATH`, or in `desktop/vendor/bin` via `node scripts/build.mjs vendor`)
 
-### 1. Clonar e instalar
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/DanielRodriguez9/dr-music-free.git
 cd dr-music-free
 
-# servidor
+# server
 cd backend
 python -m venv venv
 venv\Scripts\pip install -r requirements-dev.txt
-copy .env.example .env      # opcional: todas las variables tienen valor por defecto
+copy .env.example .env      # optional: every variable has a default value
 cd ..
 
-# interfaz
+# interface
 cd frontend
 npm install
 cd ..
 
-# escritorio
+# desktop
 cd desktop
 npm install
 cd ..
 ```
 
-### 2. Ejecutar
+### 2. Run
 
-**Como app de escritorio**: Electron lanza el servidor por su cuenta.
+**As a desktop app**: Electron launches the server by itself.
 
 ```bash
 cd frontend && npm run build && cd ..
 cd desktop && npm start
 ```
 
-**En el navegador**, con recarga en caliente. Usa dos terminales:
+**In the browser**, with hot reload. Use two terminals:
 
 ```bash
-# terminal 1: servidor en http://127.0.0.1:8000 (documentación en /docs)
+# terminal 1: server at http://127.0.0.1:8000 (API docs at /docs)
 cd backend
 venv\Scripts\python main.py
 
-# terminal 2: interfaz en http://localhost:5174
+# terminal 2: interface at http://localhost:5174
 cd frontend
 npm run dev
 ```
@@ -168,84 +172,86 @@ npm run dev
 ## 🧪 Tests
 
 ```bash
-# servidor (pytest)
+# server (pytest)
 cd backend
 venv\Scripts\python -m pytest
 
-# interfaz (Vitest + ESLint)
+# interface (Vitest + ESLint)
 cd frontend
 npm test
 npm run lint
 ```
 
-Los tests del servidor trabajan en carpetas temporales y nunca tocan la música ni la base de datos real.
+The server tests work in temporary folders and never touch your real music or database.
 
 ---
 
-## 📦 Compilar el instalador
+## 📦 Building the installer
 
 ```bash
 cd desktop
 npm run build
 ```
 
-El script `desktop/scripts/build.mjs` hace todo el proceso:
+The `desktop/scripts/build.mjs` script runs the whole process:
 
-1. compila la interfaz con Vite;
-2. empaqueta el servidor con PyInstaller;
-3. prepara FFmpeg y yt-dlp en `desktop/vendor/bin`;
-4. genera el instalador con electron-builder.
+1. builds the interface with Vite;
+2. packages the server with PyInstaller;
+3. prepares FFmpeg and yt-dlp in `desktop/vendor/bin`;
+4. creates the installer with electron-builder.
 
-El resultado queda en `desktop/release/DR-Music-Free-Setup-<versión>.exe`.
+The output is `desktop/release/DR-Music-Free-Setup-<version>.exe`.
 
-Para ejecutar solo algunos pasos: `node scripts/build.mjs frontend backend installer`. Si FFmpeg no está en el `PATH`, indica su carpeta con la variable `FFMPEG_DIR`.
+To run only some steps: `node scripts/build.mjs frontend backend installer`. If FFmpeg is not on the `PATH`, set its folder with the `FFMPEG_DIR` variable.
 
 ---
 
-## 📁 Estructura del proyecto
+## 📁 Project structure
 
 ```text
 dr-music-free/
-├── backend/                  Servidor FastAPI
-│   ├── main.py               API y arranque
-│   ├── config.py             Rutas y opciones (.env / variables de entorno)
-│   ├── db.py                 Modelos SQLAlchemy y migraciones de SQLite
-│   ├── library.py            Título/artista, etiquetas y archivos de audio
-│   ├── downloader.py         Cola de descargas con progreso
-│   ├── youtube.py            Búsqueda y reproducción en línea
-│   ├── ytdlp_tool.py         yt-dlp actualizable sin reinstalar la app
-│   ├── covers.py             Carátulas guardadas en disco
-│   ├── mixes.py              Mixes automáticos
-│   ├── fixes.py              Propuestas de corrección de artistas
-│   ├── importer.py           Importación de carpetas locales
-│   ├── tests/                Tests con pytest
+├── backend/                  FastAPI server
+│   ├── main.py               API and startup
+│   ├── config.py             Paths and options (.env / environment variables)
+│   ├── db.py                 SQLAlchemy models and SQLite migrations
+│   ├── library.py            Title/artist, tags and audio files
+│   ├── downloader.py         Download queue with progress
+│   ├── youtube.py            Online search and streaming
+│   ├── ytdlp_tool.py         yt-dlp, updatable without reinstalling the app
+│   ├── covers.py             Cover art saved to disk
+│   ├── mixes.py              Automatic mixes
+│   ├── fixes.py              Artist correction proposals
+│   ├── importer.py           Local folder import
+│   ├── tests/                pytest tests
 │   └── requirements.txt
-├── frontend/                 Interfaz React + Vite
+├── frontend/                 React + Vite interface
 │   └── src/
-│       ├── pages/            Inicio, Buscar, Artistas, Álbumes, Mix, Historial, Ajustes...
-│       ├── components/       Lista de canciones, barra del reproductor, tarjetas...
-│       ├── player/           Reproductor, cola y teclas multimedia
-│       ├── context/          Estado de la biblioteca y de la interfaz
-│       ├── hooks/            Atajos, acciones sobre canciones, mixes...
-│       └── lib/              Formato, artistas y vistas (con tests)
-├── desktop/                  App de escritorio Electron
-│   ├── src/                  Proceso principal, servidor, ajustes y preload
-│   ├── scripts/build.mjs     Compilación completa del instalador
-│   ├── build/                Icono de la app
-│   └── electron-builder.yml  Configuración del instalador NSIS
-├── docs/screenshots/         Capturas del README
+│       ├── pages/            Home, Search, Artists, Albums, Mix, History, Settings...
+│       ├── components/       Track list, player bar, cards...
+│       ├── player/           Player, queue and media keys
+│       ├── context/          Library and interface state
+│       ├── hooks/            Shortcuts, song actions, mixes...
+│       └── lib/              Formatting, artists and views (with tests)
+├── desktop/                  Electron desktop app
+│   ├── src/                  Main process, server launcher, settings and preload
+│   ├── scripts/build.mjs     Full installer build
+│   ├── build/                App icon
+│   └── electron-builder.yml  NSIS installer configuration
+├── docs/screenshots/         README screenshots
 ├── .gitignore
-└── README.md
+├── PENDIENTES.md             Status and roadmap (Spanish)
+├── README.md                 This file (English)
+└── README.es.md              Spanish version
 ```
 
 ---
 
-## 👤 Autor
+## 👤 Author
 
 **Daniel Rodríguez** · GitHub: [@DanielRodriguez9](https://github.com/DanielRodriguez9)
 
-## 📄 Licencia
+## 📄 License
 
-MIT – Uso personal y educativo.
+MIT – Personal and educational use.
 
-⭐ ¿Te gusta el proyecto? Dale una estrella en GitHub.
+⭐ Like the project? Give it a star on GitHub.
