@@ -14,6 +14,8 @@ const ORIGIN = "app://drmusic";
 // DRMUSIC_DATA_DIR permite probar la app con otra carpeta sin tocar la real.
 const DATA_DIR = process.env.DRMUSIC_DATA_DIR || path.join(app.getPath("appData"), APP_NAME);
 app.setPath("userData", path.join(DATA_DIR, "electron"));
+// En pruebas la carpeta "Música" también es de prueba: la bienvenida no crea nada en el perfil real.
+if (process.env.DRMUSIC_DATA_DIR) app.setPath("music", path.join(DATA_DIR, "Música"));
 // Con una carpeta de datos de prueba se usa otra identidad para que las pruebas (controles
 // multimedia de Windows) nunca toquen la app de verdad si está abierta al mismo tiempo.
 app.setAppUserModelId(process.env.DRMUSIC_DATA_DIR ? "com.drmusic.free.test" : "com.drmusic.free");
@@ -199,22 +201,21 @@ function run() {
     return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
   }
 
-  async function ensureMusicDir() {
-    let dir = settings.get("musicDir");
-    if (dir) return dir;
-    await dialog.showMessageBox({
-      type: "info",
-      title: APP_NAME,
-      message: "¿Dónde está tu música?",
-      detail: "Elige la carpeta donde guardas tus canciones. La app solo la usa: no copia ni mueve nada. Podrás cambiarla después en Ajustes.",
-      buttons: ["Elegir carpeta"],
-      icon: ICON,
-    });
-    dir = (await askMusicDir()) || path.join(app.getPath("music"), APP_NAME);
-    fs.mkdirSync(dir, { recursive: true });
-    settings.set("musicDir", dir);
-    return dir;
+  // ---------- bienvenida (primera vez) ----------
+  // Sin settings.json es un equipo nuevo: la interfaz muestra la bienvenida (nombre y carpeta).
+  // Mientras tanto el servidor arranca con la carpeta recomendada, Música\DR Music Free.
+  const DEFAULT_MUSIC_DIR = path.join(app.getPath("music"), APP_NAME);
+  if (!settings.existed) settings.set("welcomePending", true);
+  const welcome = () => Boolean(settings.get("welcomePending") || !settings.get("musicDir"));
+  let createdDefaultDir = false; // la carpeta recomendada la creó la bienvenida (se quita si no se usa)
+
+  function startupMusicDir() {
+    if (!welcome()) return settings.get("musicDir");
+    createdDefaultDir = !fs.existsSync(DEFAULT_MUSIC_DIR);
+    fs.mkdirSync(DEFAULT_MUSIC_DIR, { recursive: true });
+    return DEFAULT_MUSIC_DIR;
   }
+  let runningMusicDir = null;
 
   // ---------- comunicación con la interfaz ----------
   ipcMain.on("get-config", (e) => {
@@ -222,15 +223,16 @@ function run() {
       apiBase: `http://127.0.0.1:${backend.port}`,
       version: app.getVersion(),
       isPackaged: app.isPackaged,
-      userName: settings.get("userName") || "",
+      prefs: settings.publicValues(),
+      welcome: welcome() ? { defaultMusicDir: DEFAULT_MUSIC_DIR } : null,
     };
   });
 
   ipcMain.handle("settings:get", () => ({
+    ...settings.publicValues(),
     musicDir: settings.get("musicDir"),
     closeToTray: settings.get("closeToTray"),
     openAtLogin: settings.get("openAtLogin"),
-    userName: settings.get("userName") || "",
     dataDir: DATA_DIR,
     logDir: path.join(DATA_DIR, "logs"),
     version: app.getVersion(),
@@ -238,27 +240,44 @@ function run() {
   }));
 
   ipcMain.handle("settings:set", (_e, key, value) => {
-    if (key === "closeToTray") {
-      settings.set("closeToTray", Boolean(value));
-      setTrayEnabled(Boolean(value));
-    } else if (key === "userName") {
-      settings.set("userName", String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 40));
-    } else if (key === "openAtLogin") {
-      settings.set("openAtLogin", Boolean(value));
-      applyOpenAtLogin(Boolean(value));
-    } else {
-      throw new Error(`Ajuste desconocido: ${key}`);
-    }
-    return true;
+    const v = settings.setFromUI(key, value);
+    if (key === "closeToTray") setTrayEnabled(v);
+    if (key === "openAtLogin") applyOpenAtLogin(v);
+    return v;
   });
 
   ipcMain.handle("settings:choose-music-dir", async () => {
     const dir = await askMusicDir(settings.get("musicDir"));
     if (!dir || dir === settings.get("musicDir")) return null;
     settings.set("musicDir", dir);
+    runningMusicDir = dir;
     await backend.restart(dir);
     win?.webContents.reload(); // mismo origen: la sesión guardada se conserva
     return dir;
+  });
+
+  // bienvenida: elegir otra carpeta (todavía no se guarda)
+  ipcMain.handle("welcome:choose-dir", () => askMusicDir(DEFAULT_MUSIC_DIR));
+
+  // bienvenida terminada: se guarda la carpeta; si no es la recomendada, el servidor se reinicia con ella
+  ipcMain.handle("welcome:finish", async (_e, musicDir) => {
+    const dir = typeof musicDir === "string" && musicDir.trim() ? path.resolve(musicDir) : DEFAULT_MUSIC_DIR;
+    fs.mkdirSync(dir, { recursive: true });
+    settings.set("musicDir", dir);
+    settings.set("welcomePending", false);
+    if (dir === runningMusicDir) return { reloaded: false };
+    runningMusicDir = dir;
+    await backend.restart(dir);
+    // la carpeta recomendada quedó sin usar: si la creó la bienvenida y sigue vacía, se quita
+    if (createdDefaultDir && dir !== DEFAULT_MUSIC_DIR) {
+      try {
+        fs.rmdirSync(DEFAULT_MUSIC_DIR); // solo funciona si está vacía
+      } catch {
+        /* tiene archivos: se deja */
+      }
+    }
+    win?.webContents.reload(); // el servidor cambió de puerto
+    return { reloaded: true };
   });
 
   // importar una carpeta de música: solo devuelve la ruta elegida (el servidor la lee)
@@ -317,8 +336,8 @@ function run() {
     createWindow();
 
     try {
-      const musicDir = await ensureMusicDir();
-      await backend.start(musicDir);
+      runningMusicDir = startupMusicDir();
+      await backend.start(runningMusicDir);
       win?.loadURL(`${ORIGIN}/index.html`);
     } catch (err) {
       dialog.showErrorBox(APP_NAME, `No se pudo iniciar el servidor de música.\n\n${err.message}`);

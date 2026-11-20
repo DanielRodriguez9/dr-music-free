@@ -31,7 +31,7 @@ const matches = (song, q) =>
  * - `genreFilter`: muestra el selector de género (biblioteca).
  */
 export default function Collection({
-  id, title, kicker, icon = "library", songs, emptyText, playlist = null, genreFilter = false, actions: extraActions,
+  id, title, kicker, icon = "library", songs, emptyText, emptyContent = null, playlist = null, genreFilter = false, actions: extraActions,
   heroSong = null, orderLabel = null, defaultSortKey = null, subtitle = null, beforeList = null, showGenre,
 }) {
   const { playAll, renamePlaylist, deletePlaylist } = useSongActions();
@@ -113,26 +113,31 @@ export default function Collection({
       </header>
 
       <div className="actionbar">
-        <button
-          type="button"
-          className="play-btn play-btn--xl"
-          onClick={() => playAll(shown, title)}
-          disabled={!playable.length}
-          aria-label={`Reproducir ${title}`}
-          title="Reproducir"
-        >
-          <Play size={24} fill="currentColor" />
-        </button>
-        <button
-          type="button"
-          className="icon-btn icon-btn--lg"
-          onClick={() => playAll(shown, title, { shuffle: true })}
-          disabled={!playable.length}
-          aria-label="Reproducir en aleatorio"
-          title="Reproducir en aleatorio"
-        >
-          <Shuffle size={22} />
-        </button>
+        {/* sin canciones no hay nada que reproducir: se esconden reproducir y aleatorio */}
+        {songs.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="play-btn play-btn--xl"
+              onClick={() => playAll(shown, title)}
+              disabled={!playable.length}
+              aria-label={`Reproducir ${title}`}
+              title="Reproducir"
+            >
+              <Play size={24} fill="currentColor" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn--lg"
+              onClick={() => playAll(shown, title, { shuffle: true })}
+              disabled={!playable.length}
+              aria-label="Reproducir en aleatorio"
+              title="Reproducir en aleatorio"
+            >
+              <Shuffle size={22} />
+            </button>
+          </>
+        )}
         {playlist && (
           <>
             <button type="button" className="icon-btn icon-btn--lg" onClick={() => renamePlaylist(playlist)} aria-label="Renombrar lista" title="Renombrar lista">
@@ -182,7 +187,7 @@ export default function Collection({
       )}
 
       {songs.length === 0 ? (
-        <p className="empty">{emptyText}</p>
+        emptyContent ?? <p className="empty">{emptyText}</p>
       ) : shown.length === 0 ? (
         <p className="empty">{filter ? `Nada coincide con «${filter}».` : "No hay canciones de este género."}</p>
       ) : (

@@ -4,7 +4,7 @@
 
 Reproductor de música de escritorio para Windows. Organiza y reproduce tu biblioteca local sin depender de internet, con listas, mixes automáticos según lo que escuchas y, de forma opcional, búsqueda y descarga desde YouTube.
 
-![Versión](https://img.shields.io/badge/versión-2.2.0-blue)
+![Versión](https://img.shields.io/badge/versión-2.3.0-blue)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6)
 ![Electron](https://img.shields.io/badge/Electron-45-47848F)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
@@ -52,6 +52,7 @@ Reproductor de música de escritorio para Windows. Organiza y reproduce tu bibli
 - El usuario es el único responsable del uso que le dé
 - No fomentamos la piratería
 - No descargues contenido con derechos de autor sin permiso
+- Las letras vienen de [LRCLIB](https://lrclib.net) y son de sus autores; solo se muestran para uso personal
 
 ---
 
@@ -74,6 +75,10 @@ Reproductor de música de escritorio para Windows. Organiza y reproduce tu bibli
 - **Importación de carpetas** del equipo. Los archivos se leen donde están, nunca se mueven ni se borran.
 - **Corrección automática de artistas** para canciones sin artista, con artista y título invertidos o con el mismo artista escrito de varias formas. Primero se proponen los cambios y no se aplica nada hasta que el usuario los revisa.
 - **Búsqueda y descarga opcional desde YouTube**: reproducción en línea o descarga a MP3 con metadatos.
+- **Letras** desde [LRCLIB](https://lrclib.net) (gratis, sin clave), ocultas hasta que las abres. La letra sincronizada resalta la línea actual, se desplaza sola y salta a un momento con un clic; la letra sin sincronizar muestra el texto completo. Se guardan en disco y funcionan sin internet y con canciones en línea de YouTube. Atajo: `T`.
+- **Modo karaoke**: pantalla completa con la letra grande y centrada, la línea actual resaltada y la siguiente en gris, legible de lejos en un televisor. Atajo: `K`; se sale con `Esc`.
+- **Fondo personalizado**: una imagen propia (JPG, PNG o WEBP) o la carátula de la canción actual detrás de toda la app, oscurecida y difuminada, con controles de intensidad y difuminado y, si quieres, el color de acento tomado de la imagen. El difuminado se calcula una vez y se guarda, así que no cuesta nada al desplazarse.
+- **Pantalla de bienvenida** la primera vez: tu nombre para el saludo y la carpeta de música (recomendada: `Música\DR Music Free`).
 
 ---
 
@@ -107,7 +112,7 @@ Electron (proceso principal)
 3. El servidor gestiona la biblioteca (SQLite), sirve el audio con soporte de rangos, guarda las carátulas, calcula los mixes y se encarga de las descargas.
 4. Al cerrar la app, Electron detiene el servidor.
 
-Los datos viven en `%APPDATA%\DR Music Free`: base de datos, ajustes, carátulas y copias de seguridad. Desinstalar la app no los borra, ni tampoco la música.
+Los datos viven en `%APPDATA%\DR Music Free`: base de datos, ajustes, carátulas, letras, fondo personalizado y copias de seguridad. Desinstalar la app no los borra, ni tampoco la música.
 
 ---
 
@@ -217,6 +222,8 @@ dr-music-free/
 │   ├── youtube.py            Búsqueda y reproducción en línea
 │   ├── ytdlp_tool.py         yt-dlp actualizable sin reinstalar la app
 │   ├── covers.py             Carátulas guardadas en disco
+│   ├── lyrics.py             Letras de LRCLIB guardadas en disco
+│   ├── appearance.py         Fondo personalizado (copia reducida)
 │   ├── mixes.py              Mixes automáticos
 │   ├── fixes.py              Propuestas de corrección de artistas
 │   ├── importer.py           Importación de carpetas locales
@@ -246,7 +253,7 @@ dr-music-free/
 
 ## 👤 Autor
 
-**Daniel Rodríguez** · GitHub: [@DanielRodriguez9](https://github.com/DanielRodriguez9)
+**Daniel Ricardo Parra** · GitHub: [@DanielRodriguez9](https://github.com/DanielRodriguez9)
 
 ## 📄 Licencia
 

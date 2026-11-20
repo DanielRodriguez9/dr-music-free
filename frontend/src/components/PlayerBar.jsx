@@ -9,6 +9,7 @@ import { formatTime } from "../lib/format";
 import ArtistLinks from "./ArtistLinks";
 import Cover from "./Cover";
 import LikeButton from "./LikeButton";
+import { LyricsButton } from "./Lyrics";
 import Slider from "./Slider";
 
 const REPEAT_LABEL = {
@@ -150,6 +151,7 @@ export default function PlayerBar() {
       </div>
 
       <div className="playerbar__right">
+        <LyricsButton />
         <button
           type="button"
           className={`icon-btn ${queueOpen ? "is-active" : ""}`}

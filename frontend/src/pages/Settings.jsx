@@ -1,8 +1,9 @@
-import { FolderOpen, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { FolderOpen, ImagePlus, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { api, desktop, errorMessage } from "../api";
+import { API_BASE, api, desktop, errorMessage } from "../api";
 import { LibraryCard, ProfileCard } from "../components/LibrarySettings";
+import Slider from "../components/Slider";
 import { useUI } from "../context/hooks";
 import { updateYtdlp } from "../lib/ytdlp";
 
@@ -38,6 +39,158 @@ function Row({ label, value, children }) {
       </span>
       {children}
     </div>
+  );
+}
+
+function useSavePref() {
+  const { setPref } = useUI();
+  return (key, value) => setPref(key, value).catch((err) => toast.error(`No se pudo guardar: ${errorMessage(err)}`));
+}
+
+function LyricsCard() {
+  const { prefs } = useUI();
+  const savePref = useSavePref();
+  return (
+    <section className="settings-card">
+      <h2>Letras</h2>
+      <Switch
+        label="Buscar letras"
+        description="Busca la letra en LRCLIB (lrclib.net) y la guarda en tu equipo para verla sin internet. Apagado, solo se muestran las ya guardadas."
+        checked={prefs.lyricsEnabled}
+        onChange={(v) => savePref("lyricsEnabled", v)}
+      />
+      <Switch
+        label="Abrir la letra automáticamente al reproducir"
+        description="Al empezar una canción con letra se abre el panel de la derecha. También con T, o K para el modo karaoke."
+        checked={prefs.lyricsAutoOpen}
+        onChange={(v) => savePref("lyricsAutoOpen", v)}
+      />
+    </section>
+  );
+}
+
+function RangeRow({ label, value, max, unit = "", onLive, onCommit }) {
+  return (
+    <div className="setting">
+      <span className="setting__text">
+        <span className="setting__label">{label}</span>
+      </span>
+      <div className="setting__range">
+        <Slider className="slider--setting" value={value} max={max} step={1} onLive={onLive} onCommit={onCommit} label={label} />
+        <span className="setting__value">
+          {value}
+          {unit}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function AppearanceCard() {
+  const { prefs, previewPref, bgImage, setBgImage, confirm } = useUI();
+  const savePref = useSavePref();
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+  const active = prefs.bgMode !== "off";
+
+  const upload = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { data } = await api.put("/appearance/background", file, {
+        headers: { "Content-Type": "application/octet-stream" },
+        timeout: 120000,
+      });
+      setBgImage(data);
+      if (prefs.bgMode === "off") await savePref("bgMode", "image");
+      toast.success("Fondo aplicado");
+    } catch (err) {
+      toast.error(`No se pudo usar la imagen: ${errorMessage(err)}`);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const remove = async () => {
+    const ok = await confirm({
+      title: "¿Quitar el fondo?",
+      message: "La app vuelve a su diseño original. La imagen guardada en la carpeta de datos se borra (la tuya original no se toca).",
+      confirmLabel: "Quitar fondo",
+    });
+    if (!ok) return;
+    try {
+      await api.delete("/appearance/background");
+      setBgImage(null);
+      await savePref("bgMode", "off");
+      await savePref("bgAccent", false);
+    } catch (err) {
+      toast.error(`No se pudo quitar: ${errorMessage(err)}`);
+    }
+  };
+
+  return (
+    <section className="settings-card">
+      <h2>Apariencia</h2>
+      <div className="setting">
+        <span className="setting__text">
+          <span className="setting__label">Fondo personalizado</span>
+          <span className="setting__desc">
+            Una imagen JPG, PNG o WEBP detrás de toda la app, oscurecida y difuminada para que todo se lea bien. Se guarda una copia
+            reducida en la carpeta de datos.
+          </span>
+        </span>
+        <div className="setting__actions">
+          {bgImage && <img className="bg-thumb" src={`${API_BASE}${bgImage.url}`} alt="Fondo actual" />}
+          <button type="button" className="btn btn--ghost btn--compact" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? <LoaderCircle size={16} className="spin" /> : <ImagePlus size={16} />}
+            {bgImage ? "Cambiar imagen..." : "Elegir imagen..."}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            hidden
+            onChange={(e) => upload(e.target.files?.[0])}
+          />
+        </div>
+      </div>
+      <Switch
+        label="Usar la carátula de la canción actual como fondo"
+        description="El fondo cambia con cada canción. Sin canción sonando se usa tu imagen (si elegiste una)."
+        checked={prefs.bgMode === "cover"}
+        onChange={(v) => savePref("bgMode", v ? "cover" : bgImage ? "image" : "off")}
+      />
+      <Switch
+        label="Tomar el color de acento de la imagen"
+        description="Botones, barras y resaltados usan el color principal del fondo en lugar del azul."
+        checked={prefs.bgAccent}
+        disabled={!active}
+        onChange={(v) => savePref("bgAccent", v)}
+      />
+      {active && (
+        <>
+          <RangeRow
+            label="Intensidad"
+            value={prefs.bgIntensity}
+            max={100}
+            unit=" %"
+            onLive={(v) => previewPref("bgIntensity", v)}
+            onCommit={(v) => savePref("bgIntensity", v)}
+          />
+          <RangeRow label="Difuminado" value={prefs.bgBlur} max={60} unit=" px" onCommit={(v) => savePref("bgBlur", v)} />
+        </>
+      )}
+      <div className="setting">
+        <span className="setting__text">
+          <span className="setting__label">Quitar fondo</span>
+          <span className="setting__desc">Vuelve al diseño original.</span>
+        </span>
+        <button type="button" className="btn btn--ghost btn--compact" onClick={remove} disabled={!active && !bgImage}>
+          <Trash2 size={16} /> Quitar fondo
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -114,6 +267,10 @@ export default function Settings() {
       </section>
 
       <LibraryCard />
+
+      <LyricsCard />
+
+      <AppearanceCard />
 
       {desktop && prefs && (
         <section className="settings-card">

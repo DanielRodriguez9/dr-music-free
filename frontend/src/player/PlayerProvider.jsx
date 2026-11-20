@@ -5,13 +5,11 @@ import { PlayerContext, PlayerTimeContext } from "../context/contexts";
 import { useLibrary } from "../context/hooks";
 import { load, save } from "../lib/storage";
 import { onlineErrorToast } from "../lib/ytdlp";
+import { audio } from "./audio";
 import { initialQueueState, peekNext, queueReducer, serializeQueue, upcomingFromContext } from "./queue";
 
 const POSITION_SAVE_MS = 5000;
 
-// Un único elemento de audio para toda la app (vive fuera de React).
-const audio = typeof Audio === "undefined" ? null : new Audio();
-if (audio) audio.preload = "auto";
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 function restoreQueue() {

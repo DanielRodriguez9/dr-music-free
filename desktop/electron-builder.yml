@@ -1,7 +1,7 @@
 # Configuración del instalador de DR Music Free (Windows, NSIS)
 appId: com.drmusic.free
 productName: DR Music Free
-copyright: Daniel Rodríguez
+copyright: Daniel Ricardo Parra
 
 directories:
   output: release

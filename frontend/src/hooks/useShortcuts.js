@@ -14,9 +14,11 @@ export const SHORTCUTS = [
   ["R", "Repetir (todas / una / no)"],
   ["L", "Me gusta en la canción actual"],
   ["Q", "Mostrar / ocultar la cola"],
+  ["T", "Mostrar / ocultar la letra"],
+  ["K", "Modo karaoke (pantalla completa)"],
   ["Ctrl + F", "Buscar"],
   ["?", "Ver atajos"],
-  ["Esc", "Cerrar menús y diálogos"],
+  ["Esc", "Salir del karaoke, cerrar menús y diálogos"],
 ];
 
 /** Atajos de teclado globales. */
@@ -37,7 +39,8 @@ export default function useShortcuts({ onToggleLike }) {
         return;
       }
       if (e.key === "Escape") {
-        if (ui.menu) ui.closeMenu();
+        if (ui.karaoke) ui.setKaraoke(false);
+        else if (ui.menu) ui.closeMenu();
         else if (ui.dialog) ui.closeDialog(false);
         else if (isTyping(document.activeElement)) document.activeElement.blur();
         return;
@@ -56,6 +59,8 @@ export default function useShortcuts({ onToggleLike }) {
         s: player.toggleShuffle,
         r: player.cycleRepeat,
         q: ui.toggleQueue,
+        t: ui.toggleLyrics,
+        k: () => player.current && ui.setKaraoke((on) => !on),
         l: () => player.current && onToggleLike(player.current),
         "?": () => ui.openDialog({ type: "shortcuts" }),
       };

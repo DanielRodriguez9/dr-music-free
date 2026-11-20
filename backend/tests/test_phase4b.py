@@ -149,6 +149,18 @@ def test_cover_cached_on_disk(client, app, add_song, cfg, monkeypatch):
     assert st["saved"] == 1 and st["without_art"] == 1
 
 
+def test_cover_status_total_not_overwritten_by_fill_progress(client, app, add_song, cfg):
+    """Regresión: tras un relleno en segundo plano sin nada pendiente salía «1 de 0 guardadas»."""
+    app.state.covers = covers_mod.CoverStore(cfg.data_dir / "covers", app.state.sessions, cfg.music_dir,
+                                             fetch=lambda url: _jpeg(640, 480))
+    sid = add_song(youtube_id="ddddddddddd")
+    assert client.get(f"/cover/{sid}").status_code == 200
+    app.state.covers._fill(0)  # relleno terminado: no quedaba ninguna por guardar
+    st = client.get("/covers/status").json()
+    assert st["total"] == 1 and st["saved"] == 1 and st["missing"] == 0
+    assert st["running"] is False and st["fill_total"] == 0
+
+
 def test_cover_from_embedded_art(client, app, add_song, cfg, monkeypatch):
     monkeypatch.setattr(covers_mod, "embedded_art", lambda path: _jpeg(500, 500, (10, 200, 10)))
     app.state.covers = covers_mod.CoverStore(cfg.data_dir / "covers", app.state.sessions, cfg.music_dir,

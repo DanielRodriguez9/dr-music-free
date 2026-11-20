@@ -1,8 +1,12 @@
 import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
 import { desktop } from "./api";
+import Backdrop from "./components/Backdrop";
 import ContextMenu from "./components/ContextMenu";
 import Dialogs from "./components/Dialogs";
+import EmptyLibrary from "./components/EmptyLibrary";
+import Welcome from "./components/Welcome";
+import { Karaoke, LyricsAutoOpen, LyricsPanel } from "./components/Lyrics";
 import PlayerBar from "./components/PlayerBar";
 import QueuePanel from "./components/QueuePanel";
 import Sidebar from "./components/Sidebar";
@@ -90,7 +94,7 @@ function Content() {
           kicker="Colección"
           songs={songs}
           genreFilter
-          emptyText="Tu biblioteca está vacía. Usa «Descargar» para añadir canciones."
+          emptyContent={<EmptyLibrary />}
         />
       );
     case "liked":
@@ -120,19 +124,23 @@ function Content() {
 }
 
 function Layout() {
-  const { queueOpen, scrollRef } = useUI();
+  const { queueOpen, lyricsOpen, karaoke, welcome, scrollRef } = useUI();
   return (
-    <div className={`app ${queueOpen ? "has-queue" : ""}`}>
+    <div className={`app ${queueOpen || lyricsOpen ? "has-queue" : ""}`}>
+      <Backdrop />
       <Sidebar />
       <main className="main" ref={scrollRef}>
         <TopBar />
         <Content />
       </main>
-      {queueOpen && <QueuePanel />}
+      {queueOpen ? <QueuePanel /> : lyricsOpen ? <LyricsPanel /> : null}
       <PlayerBar />
       <ContextMenu />
       <Dialogs />
       <Shortcuts />
+      <LyricsAutoOpen />
+      {karaoke && <Karaoke />}
+      {welcome && <Welcome />}
       {desktop && <DesktopBridge />}
       <Toaster
         position="bottom-center"

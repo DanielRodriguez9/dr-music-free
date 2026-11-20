@@ -144,7 +144,53 @@ def build_mixes(db, today: date | None = None) -> list[dict]:
     rng.shuffle(daily)
     mixes.insert(0, _mix("daily", "Mix diario", f"Cambia cada día · {today.strftime('%d/%m')}", daily, "daily"))
 
-    # portada: hasta 4 canciones distintas
+    # portada: hasta 4 canciones distintas (sin carátulas visualmente repetidas: ver choose_covers)
     for m in mixes:
         m["cover_ids"] = m["song_ids"][:4]
     return mixes
+
+
+def _hamming(a: int, b: int) -> int:
+    return (a ^ b).bit_count()
+
+
+def choose_covers(mixes: list[dict], fingerprint, size: int = 4, tolerance: int = 6) -> None:
+    """Elige las carátulas de cada mix sin repetir imagen dentro del mix ni con el mix anterior
+    (y, si se puede, con ningún mix ya mostrado). `fingerprint(song_id)` da la huella de la
+    carátula (int) o None si no se conoce (entonces cuenta como única).
+    Dos canciones distintas suelen tener la misma portada (mismo álbum subido a YouTube),
+    por eso se compara la imagen y no el id."""
+    shown: list[int] = []  # huellas de todos los mixes anteriores
+    previous: list[int] = []  # huellas del mix anterior
+
+    def seen(fp, pool) -> bool:
+        return fp is not None and any(_hamming(fp, x) <= tolerance for x in pool)
+
+    memo: dict[int, int | None] = {}
+
+    def fp_of(sid: int):  # solo se calcula la huella de las canciones que se miran
+        if sid not in memo:
+            memo[sid] = fingerprint(sid)
+        return memo[sid]
+
+    for m in mixes:
+        chosen: list[int] = []
+        mine: list[int] = []
+        # primero canciones con carátula guardada (sin ella se ve la nota de relleno), y en cada caso:
+        # 1) nunca vista; 2) no está en el mix anterior; 3) cualquiera (sin repetir dentro del mix)
+        tiers = [(avoid, need_art) for need_art in (True, False) for avoid in (shown, previous, [])]
+        for avoid, need_art in tiers:
+            for sid in m["song_ids"]:
+                if len(chosen) >= size:
+                    break
+                if sid in chosen:
+                    continue
+                fp = fp_of(sid)
+                if (need_art and fp is None) or seen(fp, mine) or seen(fp, avoid):
+                    continue
+                chosen.append(sid)
+                if fp is not None:
+                    mine.append(fp)
+        m["cover_ids"] = chosen
+        previous = mine
+        shown.extend(mine)

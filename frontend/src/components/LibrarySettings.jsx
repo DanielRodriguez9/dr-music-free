@@ -199,7 +199,7 @@ export function LibraryCard() {
           <span className="setting__desc">
             {covers
               ? covers.running
-                ? `Guardando... ${covers.done} de ${covers.total}`
+                ? `Guardando... ${covers.fill_done} de ${covers.fill_total}`
                 : `${covers.saved} de ${covers.total} guardadas en disco (${covers.size_mb} MB)` +
                   (covers.without_art ? ` · ${covers.without_art} sin carátula disponible` : "")
               : "..."}

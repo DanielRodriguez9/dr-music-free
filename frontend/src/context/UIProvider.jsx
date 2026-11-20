@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { desktop } from "../api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, desktop } from "../api";
+import { DEFAULT_PREFS } from "../lib/prefs";
 import { load, save } from "../lib/storage";
 import { isView } from "../lib/views";
 import { UIContext } from "./contexts";
@@ -10,9 +11,23 @@ export default function UIProvider({ children }) {
     return isView(v) ? v : "home";
   });
   const [query, setQuery] = useState("");
-  // nombre para el saludo de Inicio: en la app de escritorio vive en settings.json
-  const [userName, setUserNameState] = useState(() => (desktop ? desktop.userName || "" : load("userName", "")));
+  // preferencias (nombre del saludo, letras, fondo): en la app de escritorio viven en settings.json
+  const [prefs, setPrefs] = useState(() => ({ ...DEFAULT_PREFS, ...(desktop ? desktop.prefs : load("prefs", { userName: load("userName", "") })) }));
+  const userName = prefs.userName || "";
+  // panel de la derecha: la cola o la letra (no las dos a la vez)
   const [queueOpen, setQueueOpen] = useState(() => Boolean(load("queueOpen", false)));
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [karaoke, setKaraoke] = useState(false);
+  // bienvenida: { defaultMusicDir } la primera vez en este equipo
+  const [welcome, setWelcome] = useState(() => desktop?.welcome ?? null);
+  // imagen de fondo propia guardada en la carpeta de datos: { url } o null
+  const [bgImage, setBgImage] = useState(null);
+  useEffect(() => {
+    api
+      .get("/appearance/")
+      .then(({ data }) => setBgImage(data.background))
+      .catch(() => {});
+  }, []);
   const [dialog, setDialog] = useState(null); // { type: "download" | "shortcuts" | "confirm", ... }
   const [menu, setMenu] = useState(null); // { x, y, song, context }
   const searchRef = useRef(null);
@@ -25,13 +40,25 @@ export default function UIProvider({ children }) {
     scrollRef.current?.scrollTo({ top: 0 });
   }, []);
 
-  const setUserName = useCallback((name) => {
-    const clean = (name || "").replace(/\s+/g, " ").trim().slice(0, 40);
-    setUserNameState(clean);
-    if (desktop) return desktop.setSetting("userName", clean);
-    save("userName", clean);
-    return Promise.resolve();
+  /** Cambia una preferencia; en la app de escritorio la valida y la guarda Electron. */
+  const setPref = useCallback(async (key, value) => {
+    let saved = value;
+    if (desktop) saved = await desktop.setSetting(key, value);
+    setPrefs((p) => {
+      const next = { ...p, [key]: saved };
+      if (!desktop) save("prefs", next);
+      return next;
+    });
+    return saved;
   }, []);
+
+  /** Cambia una preferencia solo en pantalla (mientras se arrastra un deslizador). */
+  const previewPref = useCallback((key, value) => setPrefs((p) => ({ ...p, [key]: value })), []);
+
+  const setUserName = useCallback(
+    (name) => setPref("userName", (name || "").replace(/\s+/g, " ").trim().slice(0, 40)),
+    [setPref],
+  );
 
   const focusSearch = useCallback(() => {
     searchRef.current?.focus();
@@ -49,6 +76,24 @@ export default function UIProvider({ children }) {
   const toggleQueue = useCallback(() => {
     setQueueOpen((open) => {
       save("queueOpen", !open);
+      if (!open) setLyricsOpen(false);
+      return !open;
+    });
+  }, []);
+
+  const openLyrics = useCallback((open = true) => {
+    setLyricsOpen(open);
+    if (open) {
+      setQueueOpen(false);
+      save("queueOpen", false);
+    }
+  }, []);
+  const toggleLyrics = useCallback(() => {
+    setLyricsOpen((open) => {
+      if (!open) {
+        setQueueOpen(false);
+        save("queueOpen", false);
+      }
       return !open;
     });
   }, []);
@@ -104,6 +149,18 @@ export default function UIProvider({ children }) {
       setQuery,
       userName,
       setUserName,
+      prefs,
+      setPref,
+      previewPref,
+      bgImage,
+      setBgImage,
+      lyricsOpen,
+      openLyrics,
+      toggleLyrics,
+      karaoke,
+      setKaraoke,
+      welcome,
+      setWelcome,
       searchFor,
       searchRef,
       scrollRef,
@@ -119,7 +176,7 @@ export default function UIProvider({ children }) {
       openMenu,
       closeMenu,
     }),
-    [view, navigate, query, userName, setUserName, searchFor, focusSearch, queueOpen, toggleQueue, dialog, closeDialog, confirm, prompt, menu, openMenu, closeMenu],
+    [view, navigate, query, userName, setUserName, prefs, setPref, previewPref, bgImage, lyricsOpen, openLyrics, toggleLyrics, karaoke, welcome, searchFor, focusSearch, queueOpen, toggleQueue, dialog, closeDialog, confirm, prompt, menu, openMenu, closeMenu],
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

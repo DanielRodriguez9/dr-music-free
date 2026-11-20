@@ -2,6 +2,7 @@ import { Pause, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { isPlayable } from "../api";
 import Cover from "../components/Cover";
+import EmptyLibrary from "../components/EmptyLibrary";
 import MixCard from "../components/MixCard";
 import Shelf from "../components/Shelf";
 import { useLibrary, usePlayer, useUI } from "../context/hooks";
@@ -74,6 +75,7 @@ function MadeForYou() {
   const { playAll } = useSongActions();
   if (!mixes?.length) return null;
   const songsOf = (m) => m.song_ids.map((id) => byId.get(id)).filter(Boolean);
+  const coversOf = (m) => (m.cover_ids || []).map((id) => byId.get(id)).filter(Boolean);
   return (
     <section className="shelf">
       <header className="shelf__header">
@@ -88,6 +90,7 @@ function MadeForYou() {
             key={m.id}
             mix={m}
             songs={songsOf(m)}
+            covers={coversOf(m)}
             onOpen={(x) => navigate(`mix:${x.id}`)}
             onPlay={(x) => playAll(songsOf(x), x.title)}
           />
@@ -130,7 +133,7 @@ export default function Home() {
         songs={sections.recent}
         label="Agregadas recientemente"
         onSeeAll={() => navigate("library")}
-        empty="Todavía no hay canciones. Usa «Descargar» para añadir la primera."
+        empty={<EmptyLibrary compact />}
       />
 
       <Shelf

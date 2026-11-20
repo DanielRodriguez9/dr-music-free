@@ -23,7 +23,7 @@ export default function Shelf({ title, subtitle, songs, label, onSeeAll, empty }
         )}
       </header>
       {songs.length === 0 ? (
-        <p className="shelf__empty">{empty}</p>
+        typeof empty === "string" ? <p className="shelf__empty">{empty}</p> : empty
       ) : (
         <div className="shelf__grid">
           {songs.map((song) => (

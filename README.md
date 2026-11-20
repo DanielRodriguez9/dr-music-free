@@ -6,7 +6,7 @@ Desktop music player for Windows. Organize and play your local library without d
 
 > **Note:** the app's user interface is currently in Spanish.
 
-![Version](https://img.shields.io/badge/version-2.2.0-blue)
+![Version](https://img.shields.io/badge/version-2.3.0-blue)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6)
 ![Electron](https://img.shields.io/badge/Electron-45-47848F)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
@@ -54,6 +54,7 @@ Desktop music player for Windows. Organize and play your local library without d
 - The user is solely responsible for how it is used
 - We do not encourage piracy
 - Do not download copyrighted content without permission
+- Lyrics come from [LRCLIB](https://lrclib.net) and belong to their authors; they are only shown for personal use
 
 ---
 
@@ -76,6 +77,10 @@ Desktop music player for Windows. Organize and play your local library without d
 - **Folder import** from your computer. Files are read where they are; they are never moved or deleted.
 - **Automatic artist correction** for songs with no artist, with artist and title swapped, or with the same artist spelled in different ways. Changes are proposed first and nothing is applied until the user reviews them.
 - **Optional YouTube search and download**: stream online or download to MP3 with metadata.
+- **Lyrics** from [LRCLIB](https://lrclib.net) (free, no API key), hidden until you open them. Synced lyrics highlight the current line, scroll on their own and jump to a moment with a click; plain lyrics show the full text. They are saved to disk and also work offline and with online YouTube songs. Shortcut: `T`.
+- **Karaoke mode**: full screen with large centered lyrics, the current line highlighted and the next one in gray, readable from across the room on a TV. Shortcut: `K`, exit with `Esc`.
+- **Custom background**: your own image (JPG, PNG or WEBP) or the current song's cover art behind the whole app, darkened and blurred, with intensity and blur controls and an optional accent color taken from the image. The blur is computed once and cached, so it costs nothing while scrolling.
+- **Welcome screen** the first time the app opens: your name for the greeting and the music folder (recommended: `Music\DR Music Free`).
 
 ---
 
@@ -109,7 +114,7 @@ Electron (main process)
 3. The server manages the library (SQLite), serves audio with range support, stores cover art, builds the mixes and handles downloads.
 4. When the app closes, Electron stops the server.
 
-Data lives in `%APPDATA%\DR Music Free`: database, settings, cover art and backups. Uninstalling the app does not delete it, nor the music.
+Data lives in `%APPDATA%\DR Music Free`: database, settings, cover art, lyrics, custom background and backups. Uninstalling the app does not delete it, nor the music.
 
 ---
 
@@ -219,6 +224,8 @@ dr-music-free/
 │   ├── youtube.py            Online search and streaming
 │   ├── ytdlp_tool.py         yt-dlp, updatable without reinstalling the app
 │   ├── covers.py             Cover art saved to disk
+│   ├── lyrics.py             Lyrics from LRCLIB, saved to disk
+│   ├── appearance.py         Custom background (resized copy)
 │   ├── mixes.py              Automatic mixes
 │   ├── fixes.py              Artist correction proposals
 │   ├── importer.py           Local folder import
@@ -248,7 +255,7 @@ dr-music-free/
 
 ## 👤 Author
 
-**Daniel Rodríguez** · GitHub: [@DanielRodriguez9](https://github.com/DanielRodriguez9)
+**Daniel Ricardo Parra** · GitHub: [@DanielRodriguez9](https://github.com/DanielRodriguez9)
 
 ## 📄 License
 

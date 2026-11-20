@@ -1,5 +1,5 @@
 # DR Music Free - Backend API
-# Creado por Daniel Rodríguez
+# Creado por Daniel Ricardo Parra
 # Biblioteca local de música + descargas desde YouTube
 
 from contextlib import asynccontextmanager
@@ -10,7 +10,8 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -21,15 +22,17 @@ from config import Settings, settings as default_settings
 from db import (Folder, Genre, Play, Playlist, PlaylistItem, Song, backup_database, counts_as_play, init_db,
                 make_engine, make_session_factory, utcnow)
 import ytdlp_tool
+from appearance import Background, BackgroundError
 from downloader import Downloader
 from covers import CoverStore
 from fixes import FixFinder
 from importer import Importer
 from library import is_youtube_url, song_file, sync_file_status, youtube_id
-from mixes import build_mixes
+from lyrics import LyricsStore, lyrics_key
+from mixes import build_mixes, choose_covers
 from youtube import YouTube, YouTubeError
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 _VIDEO_ID = re.compile(r"^[0-9A-Za-z_-]{11}$")
 log = logging.getLogger("drmusic")
 
@@ -200,6 +203,8 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         js_runtime=cfg.ytdlp_js_runtime, exe_env=cfg.ytdlp_env,
     )
     app.state.covers = CoverStore(cfg.data_dir / "covers", sessions, cfg.music_dir)
+    app.state.lyrics = LyricsStore(cfg.data_dir / "lyrics", VERSION)
+    app.state.background = Background(cfg.data_dir / "appearance")
     app.state.importer = Importer(sessions)
     app.state.fixes = FixFinder(sessions, cfg.music_dir)
     app.state.youtube = youtube or YouTube(
@@ -349,10 +354,60 @@ def create_app(cfg: Settings | None = None, downloader: Downloader | None = None
         request.app.state.covers.fill_missing()
         return request.app.state.covers.stats()
 
+    # ---------- letras ----------
+    # fetch=0: solo las guardadas en disco (con "Buscar letras" apagado no se usa internet)
+    @app.get("/lyrics/song/{song_id}")
+    def song_lyrics(song_id: int, request: Request, fetch: bool = True, db: Session = Depends(get_db)):
+        song = get_song_or_404(song_id, db)
+        return request.app.state.lyrics.get(lyrics_key(song.youtube_id, song.id), song.title, song.artist,
+                                            song.duration, fetch=fetch)
+
+    @app.get("/lyrics/online/{video_id}")
+    def online_lyrics(video_id: str, request: Request, title: str = Query(max_length=500),
+                      artist: str | None = None, duration: float | None = None, fetch: bool = True):
+        check_video_id(video_id)
+        return request.app.state.lyrics.get(lyrics_key(video_id, None), title, (artist or "")[:300] or None,
+                                            duration, fetch=fetch)
+
+    # ---------- apariencia: fondo personalizado ----------
+    @app.get("/appearance/")
+    def appearance(request: Request):
+        return {"background": request.app.state.background.info()}
+
+    @app.get("/appearance/background")
+    def background_image(request: Request):
+        bg = request.app.state.background
+        if not bg.file.is_file():
+            raise HTTPException(404, "No hay fondo")
+        # la URL lleva la versión: se puede guardar en caché mucho tiempo
+        return FileResponse(bg.file, media_type="image/jpeg",
+                            headers={"Cache-Control": "max-age=31536000, immutable",
+                                     "Access-Control-Allow-Origin": "*"})
+
+    @app.put("/appearance/background")
+    async def set_background(request: Request):
+        """El cuerpo es la imagen tal cual (JPG, PNG o WEBP)."""
+        data = await request.body()
+        try:
+            return await run_in_threadpool(request.app.state.background.save, data)
+        except BackgroundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/appearance/background")
+    def remove_background(request: Request):
+        request.app.state.background.remove()
+        return {"background": None}
+
     # ---------- mixes ----------
     @app.get("/mixes/")
-    def mixes(day: date | None = None, db: Session = Depends(get_db)):
-        return build_mixes(db, day)
+    def mixes(request: Request, day: date | None = None, db: Session = Depends(get_db)):
+        result = build_mixes(db, day)
+        # portadas sin imágenes repetidas (misma carátula en canciones distintas)
+        songs = {s.id: s for s in db.scalars(select(Song).where(
+            Song.id.in_({sid for m in result for sid in m["song_ids"]})))}
+        store: CoverStore = request.app.state.covers
+        choose_covers(result, lambda sid: store.fingerprint(songs[sid]) if sid in songs else None)
+        return result
 
     # ---------- carpetas importadas ----------
     @app.get("/folders/")

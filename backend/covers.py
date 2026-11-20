@@ -87,6 +87,7 @@ class CoverStore:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.progress = {"running": False, "done": 0, "total": 0}
+        self._fingerprints: dict[str, tuple[int, int]] = {}  # archivo -> (fecha, huella)
         folder.mkdir(parents=True, exist_ok=True)
 
     # ---------- archivos ----------
@@ -157,6 +158,30 @@ class CoverStore:
         from youtube import is_online
         return is_online(timeout=2)
 
+    # ---------- huella visual (para no repetir portadas en los mixes) ----------
+    def fingerprint(self, song: Song) -> int | None:
+        """dHash de 64 bits de la carátula guardada; None si no hay. Se recuerda por archivo y fecha."""
+        p = self.path(cover_key(song))
+        try:
+            mtime = p.stat().st_mtime_ns
+        except OSError:
+            return None
+        hit = self._fingerprints.get(p.name)
+        if hit and hit[0] == mtime:
+            return hit[1]
+        from PIL import Image
+        try:
+            with Image.open(p) as img:
+                px = list(img.convert("L").resize((9, 8), Image.BILINEAR).getdata())
+        except Exception:
+            return None
+        bits = 0
+        for row in range(8):
+            for col in range(8):
+                bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+        self._fingerprints[p.name] = (mtime, bits)
+        return bits
+
     # ---------- estado y relleno en segundo plano ----------
     def stats(self) -> dict:
         with self.sessions() as db:
@@ -165,11 +190,14 @@ class CoverStore:
         files = {p.stem: p.stat().st_size for p in self.folder.glob("*.jpg")}
         have = keys & files.keys()
         none = {k for k in keys - have if self._none_marker(k).is_file()}
+        # el avance del relleno va con nombres propios: su "total" (las que faltaban al empezar)
+        # no debe pisar el total de canciones (salía "1 de 0 guardadas")
         return {
             "total": len(keys), "saved": len(have), "without_art": len(none),
             "missing": len(keys) - len(have) - len(none),
             "size_mb": round(sum(files[k] for k in have) / (1024 * 1024), 1),
-            **self.progress,
+            "running": self.progress["running"],
+            "fill_done": self.progress["done"], "fill_total": self.progress["total"],
         }
 
     def fill_missing(self, delay: float = 0.15) -> None:
